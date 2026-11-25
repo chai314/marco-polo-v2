@@ -43,7 +43,7 @@
     <section class="step" data-step="many" aria-labelledby="h-many">
       <h2 id="h-many">Many balls, one calm average</h2>
       <p>One ball is a wild guess. The average of many balls is calm. The needle under the board shows the average payoff so far.</p>
-      <p>The yellow band is the true price, <b data-live="exact">47.30</b>, from the Black–Scholes formula. We only use it to check our work. The balls never see it.</p>
+      <p>The yellow band is the true price, <b data-live="exact">46.53</b>, from the Black–Scholes formula. We only use it to check our work. The balls never see it.</p>
       <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
       <p class="readout">With <b data-live="N">2,000</b> balls the needle usually stops within <span class="pm" data-live="err:0">±2.4</span> of the truth. “Usually” means 19 times out of 20.</p>
     </section>
@@ -87,8 +87,9 @@
     </section>
 
     <section class="step trick" data-step="K" style="--c:var(--K)" aria-labelledby="h-K">
-      <h2 id="h-K"><i class="disc">K</i>Trick K: skip the dice a formula can roll for you</h2>
+      <h2 id="h-K"><i class="disc">K</i>Trick K: let a formula roll the dice</h2>
       <p>Now let the stock jump. About <b data-live="lam">0.43</b> times a year, it drops suddenly, by <b data-live="muJ">28%</b> on a typical jump. The market’s option prices tell us to expect this.</p>
+      <p>Jumps change the true price too: the yellow band moves to <b data-live="exactJ">47.30</b>, now from Merton’s formula for a jumping stock.</p>
       <p>Here is the trick. Once we know how many jumps happen, the rest of the path is smooth, and a formula prices it exactly. So we roll dice only for the number of jumps. The formula does the rest.</p>
       <p class="aside">For barrier options, K works differently. Instead of checking whether a ball touched the barrier, we compute the chance that it brushed it between two rows of pins.</p>
       <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn K off</span></button></div>
@@ -100,6 +101,7 @@
       <p>Tricks can be combined. Sometimes their gains multiply. Sometimes they fight over the same noise: S and C both go after where the ball ends up, so together they are not twice as good.</p>
       <p>Here are all 15 combinations for the jumping stock, plus plain for comparison, each with the same budget. Tap one to bolt it onto the board.</p>
       <ol id="story-rank" class="story-rank"></ol>
+      <p class="aside">Measured from 120 runs of 2,000 balls on this one market, so each factor is good to about ±25%. Treat them as sizes, not exact scores.</p>
       <div class="acts"><a class="press" href="#lab"><span>Open the lab</span></a></div>
     </section>
   </div>

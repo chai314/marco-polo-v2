@@ -261,7 +261,7 @@ body[data-step] .step:not(.on) { opacity: .32; }
 .story p { font-size: 18px; line-height: 1.6; color: var(--ink-2); margin: 0 0 16px; max-width: 34em; text-wrap: pretty; }
 .story p b { color: var(--ink); }
 .story .lead { font-size: 21px; line-height: 1.5; color: var(--ink); }
-.story .aside { font-size: 15px; color: var(--ink-3); padding-left: 16px; border-left: 2px solid var(--rule-2); }
+.story .aside { font-size: 15px; color: var(--ink-3); background: var(--shell); border-radius: 9px; padding: 10px 14px; }
 .story .note { font-size: 13.5px; color: var(--ink-3); margin-top: 8px; }
 .story .readout { font-size: 16.5px; color: var(--ink); background: var(--shell); border-radius: 10px; padding: 14px 16px; margin-top: 8px; min-height: 3.2em; }
 .story .readout:empty { display: none; }

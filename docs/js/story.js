@@ -44,12 +44,13 @@
     return { real: Math.sqrt(Math.max(short ? seen : reported, 1e-30)), paths: g.paths };
   }
   const memo = new Map();
-  const once = (key, make) => { if (!memo.has(key)) memo.set(key, make()); return memo.get(key); };
+  const done = new Map(); // resolved values, so a config can be applied in one tick
+  const once = (key, make) => { if (!memo.has(key)) { const p = make(); memo.set(key, p); p.then((v) => done.set(key, v), () => {}); } return memo.get(key); };
   const exactOf = (name) => once("exact" + name, () => eng("reference", { spec: SPECS[name] }));
   const errOf = (name, flags, reps = 200) => once(`err${name}${flags}${reps}`, () => eng("replicate", { spec: SPECS[name], flags, n: N, strata: STRATA, seed: 101, reps }).then(honest));
   const pm = (e) => `±${(1.96 * e.real).toPrecision(2)}`;
-  // one format for every factor: 7.8×, 10×, 313×, 3,260×
-  const fx = (f) => (f < 9.95 ? f.toFixed(1) : Math.round(f).toLocaleString("en")) + "×";
+  // one format for every factor, two significant figures: 1.8×, 7.8×, 52×, 310×, 3,300×
+  const fx = (f) => Number(f.toPrecision(2)).toLocaleString("en") + "×";
   const factor = (p, e) => (p.real ** 2 * p.paths) / (e.real ** 2 * e.paths);
 
   const settled = {}, settledErr = {}; // exact prices and plain 95% errors once known
@@ -57,7 +58,7 @@
   const MISS = " This particular run happened to miss by more; the \u00b1 describes a typical run.";
   const renderTrick = (l) => live("trick:" + l, off[l] ? "Showing plain balls for comparison." : (trickBase[l] || "") + (trickExtra[l] || ""));
   exactOf("GBM").then((v) => { settled.GBM = v; live("exact", v.toFixed(2)); }, () => {});
-  exactOf("JUMP").then((v) => { settled.JUMP = v; }, () => {});
+  exactOf("JUMP").then((v) => { settled.JUMP = v; live("exactJ", v.toFixed(2)); }, () => {});
   for (const name of ["GBM", "JUMP"]) errOf(name, 0).then((e) => { settledErr[name] = 1.96 * e.real; }, () => {});
   errOf("GBM", 0).then((p) => live("err:0", pm(p)), () => {});
   for (const [l, name] of [["A", "GBM"], ["S", "GBM"], ["C", "GBM"], ["K", "JUMP"]]) {
@@ -80,6 +81,14 @@
     if (cur && cur.key === key) return cur.ready;
     const spec = SPECS[name], mine = ++token, exact = settled[name] ?? NaN, E = settledErr[name];
     const cfg = (ex, e) => ({ spec, sel, seed: 7, exact: ex, ...(Number.isFinite(ex) && Number.isFinite(e) ? { gaugeRange: [ex - 1.6 * e, ex + 1.6 * e] } : {}) });
+    const keys = [`exact${name}`, `err${name}0200`, `trace${name}${sel}`, ...(sel ? [`trace${name}0`] : [])];
+    if (keys.every((k) => done.has(k))) { // everything is known: set config, trace and compare together
+      const [ex, pe, t, plain] = keys.map((k) => done.get(k));
+      board.set(cfg(ex, 1.96 * pe.real));
+      board.setTrace(t, word(sel));
+      board.setCompare(sel ? plain : null);
+      return (cur = { key, name, sel, ready: Promise.resolve() }).ready;
+    }
     board.set(cfg(exact, E));
     const c = (cur = { key, name, sel });
     c.ready = Promise.all([exactOf(name), errOf(name, 0), traceOf(name, sel), sel ? traceOf(name, 0) : null]).then(([ex, pe, t, plain]) => {
@@ -170,6 +179,7 @@
           trickExtra[step] = "";
           toggleLabel(step);
           renderTrick(step);
+          cur = null; // re-apply the whole gauge state: config, trace, compare trace and range
           await setActive(step);
           await cur.ready;
           lastDrop = N;
@@ -193,8 +203,8 @@
   }
 
   // ---------------------------------------------------------------- the cloud of experiments: four rows, one shared scale
-  const NS = "http://www.w3.org/2000/svg", ROWS = [500, 2000, 8000, 32000], PITCH = 46, TOP = 36, CH = 208, LEFT = 74, RIGHT = 52, DOTS = 40;
-  const cloud = { W: 0, svg: null, rows: [], data: [], runs: [0, 0, 0, 0], exact: NaN, half: NaN };
+  const NS = "http://www.w3.org/2000/svg", ROWS = [500, 2000, 8000, 32000], PITCH = 46, TOP = 36, CH = 208, LEFT = 74, RIGHT = 84, DOTS = 40, REPS = 120;
+  const cloud = { W: 0, svg: null, rows: [], data: [], runs: [0, 0, 0, 0], exact: NaN, half: NaN, sigma1: NaN };
   const svgEl = (tag, attrs = {}, parent) => { const el = document.createElementNS(NS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); if (parent) parent.appendChild(el); return el; };
   const jit = (i) => ((((i + 1) * 2654435761) >>> 0) % 997) / 997;
 
@@ -222,8 +232,9 @@
       });
       const brk = svgEl("path", { d: "M0 0V6H1V0", fill: "none", stroke: "#14171a", "stroke-width": 1.4, "vector-effect": "non-scaling-stroke" }, g);
       brk.style.transition = tr; brk.style.transform = `translate(${mid}px, ${y + 14}px) scaleX(0)`;
-      const lab = svgEl("text", { x: cloud.W, y: y + 18, class: "lab b", "text-anchor": "end" }, g);
-      return { n, y, dots, brk, lab };
+      const lab = svgEl("text", { x: cloud.W, y: y + 2, class: "lab b", "text-anchor": "end" }, g);
+      const theory = svgEl("text", { x: cloud.W, y: y + 17, class: "lab sub", "text-anchor": "end" }, g);
+      return { n, y, dots, brk, lab, theory };
     });
   }
   function cloudDraw(r) {
@@ -231,17 +242,19 @@
     if (!cloud.svg || !prices || !Number.isFinite(cloud.half)) return;
     const row = cloud.rows[r], span = (cloud.W - LEFT - RIGHT) / 2 - 4, X = (v) => Math.max(LEFT + 4, Math.min(cloud.W - RIGHT - 4, cloud.mid + ((v - cloud.exact) / cloud.half) * span));
     row.dots.forEach((c, i) => { c.style.transform = `translate(${X(prices[i]).toFixed(1)}px, ${c.dataset.y}px)`; });
-    const p = [...prices].sort((a, b) => a - b), at = (f) => { const x = f * (p.length - 1), i = Math.floor(x); return p[i] + (p[Math.min(i + 1, p.length - 1)] - p[i]) * (x - i); };
-    const lo = at(0.025), hi = at(0.975), x1 = X(lo), x2 = X(hi), e = (hi - lo) / 2;
+    // the error is 1.96 times the standard deviation of all the estimates about the exact price; the bracket sits on their mean
+    const m = prices.reduce((a, b) => a + b, 0) / prices.length, e = 1.96 * Math.sqrt(prices.reduce((a, b) => a + (b - cloud.exact) ** 2, 0) / prices.length), x1 = X(m - e), x2 = X(m + e);
+    const th = 1.96 * cloud.sigma1 / Math.sqrt(row.n);
+    row.theory.textContent = `theory \u00b1${th.toPrecision(2)}`;
     row.brk.style.transform = `translate(${x1.toFixed(1)}px, ${row.y + 14}px) scaleX(${Math.max(1, x2 - x1).toFixed(1)})`;
     row.lab.textContent = `\u00b1${e.toPrecision(2)}`;
     row.err = e;
-    cloud.svg.setAttribute("aria-label", "Four rows of 40 experiments: " + cloud.rows.map((q) => (q.err != null ? `${q.n.toLocaleString("en")} balls, the middle 95% within \u00b1${q.err.toPrecision(2)}` : "")).filter(Boolean).join("; ") + ".");
+    cloud.svg.setAttribute("aria-label", "Four rows of 40 experiments: " + cloud.rows.map((q) => (q.err != null ? `${q.n.toLocaleString("en")} balls, error \u00b1${q.err.toPrecision(2)}` : "")).filter(Boolean).join("; ") + ".");
   }
   async function cloudRun(r) {
     const run = ++cloud.runs[r], seed = 202 + r + 1000 * (run - 1);
     try {
-      const g = await eng("replicate", { spec: GBM, flags: 0, n: ROWS[r], strata: STRATA, seed, reps: DOTS });
+      const g = await eng("replicate", { spec: GBM, flags: 0, n: ROWS[r], strata: STRATA, seed, reps: REPS });
       if (run !== cloud.runs[r]) return;
       cloud.data[r] = [...g.price];
       cloudDraw(r);
@@ -252,6 +265,7 @@
     try {
       const [exact, base] = await Promise.all([exactOf("GBM"), errOf("GBM", 0)]);
       cloud.exact = exact;
+      cloud.sigma1 = base.real * Math.sqrt(N); // per-path spread implied by the honest 2,000-ball error
       cloud.half = 1.6 * 1.96 * base.real * Math.sqrt(N / 500); // one fixed scale: 1.6 times the 95% error at 500 balls
       ROWS.forEach((_, r) => cloudRun(r));
     } catch (e) { if (e.message !== "stale") console.error(e); }
