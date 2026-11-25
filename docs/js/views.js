@@ -3,7 +3,6 @@
 
 const Views = (() => {
   const INK = [0.078, 0.09, 0.102], GREY = [0.47, 0.5, 0.54], PALE = [0.62, 0.65, 0.69], RED = [0.75, 0.21, 0.17];
-  const HEX = { A: "#1657c9", C: "#ec6a00", S: "#10936a", K: "#a8328f" };
   const svg = () => document.getElementById("marks");
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const text = (x, y, s, cls = "", anchor = "start") => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="${cls}" text-anchor="${anchor}">${s}</text>`;
