@@ -142,7 +142,11 @@ function rail() {
   $("caveat").innerHTML = c ? `<b>Read this.</b> ${c}` : "";
   $("caveat").hidden = !c;
   const sel_ = $("ranking").querySelector('[aria-pressed="true"]'), rl = document.querySelector(".rail");
-  if (sel_ && matchMedia("(min-width: 921px)").matches) sel_.scrollIntoView({ block: "nearest" });
+  if (sel_ && rl.scrollHeight > rl.clientHeight) { // scroll only the rail, never the page
+    const box = rl.getBoundingClientRect(), row = sel_.getBoundingClientRect();
+    if (row.top < box.top) rl.scrollTop += row.top - box.top;
+    else if (row.bottom > box.bottom) rl.scrollTop += row.bottom - box.bottom;
+  }
   rl.classList.toggle("more", rl.scrollHeight - rl.scrollTop > rl.clientHeight + 4);
 }
 const biased = (s) => s.product === "american" || (s.product === "barrier" && s.mode !== "bridge");
