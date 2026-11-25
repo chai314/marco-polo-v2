@@ -34,7 +34,7 @@
   live("T", T === 0.5 ? "half a year" : `${T} years`);
   live("N", N.toLocaleString("en"));
   live("lam", JUMP.lam.toFixed(2));
-  live("muJ", `${Math.abs(Math.round(100 * JUMP.muJ))}%`);
+  live("muJ", MINUS(JUMP.muJ.toFixed(2)));
 
   // ---------------------------------------------------------------- honest errors (the lab's rule, in app.js recompute)
   function honest(g) {
@@ -55,17 +55,18 @@
 
   const settled = {}, settledErr = {}; // exact prices and plain 95% errors once known
   const trickBase = {}, trickExtra = {}, off = { A: false, S: false, C: false, K: false };
-  const MISS = " This particular run happened to miss by more; the \u00b1 describes a typical run.";
-  const renderTrick = (l) => live("trick:" + l, off[l] ? "Showing plain balls for comparison." : (trickBase[l] || "") + (trickExtra[l] || ""));
+  const MISS = " This particular run ended farther from the exact price than the plain run did; the half-width describes a typical run, not every run.";
+  const renderTrick = (l) => live("trick:" + l, off[l] ? "Showing plain Monte Carlo for comparison." : (trickBase[l] || "") + (trickExtra[l] || ""));
   exactOf("GBM").then((v) => { settled.GBM = v; live("exact", v.toFixed(2)); }, () => {});
   exactOf("JUMP").then((v) => { settled.JUMP = v; live("exactJ", v.toFixed(2)); }, () => {});
   for (const name of ["GBM", "JUMP"]) errOf(name, 0).then((e) => { settledErr[name] = 1.96 * e.real; }, () => {});
-  errOf("GBM", 0).then((p) => live("err:0", pm(p)), () => {});
+  errOf("GBM", 0).then((p) => { live("err:0", pm(p)); live("sigY", Math.round(p.real * Math.sqrt(N)).toLocaleString("en")); }, () => {});
   for (const [l, name] of [["A", "GBM"], ["S", "GBM"], ["C", "GBM"], ["K", "JUMP"]]) {
     Promise.all([errOf(name, 0), errOf(name, BIT[l])]).then(([p, e]) => {
       const f = factor(p, e), was = pm(p), now = pm(e);
-      trickBase[l] = f < 0.95 ? `Here it makes things worse: ${was} becomes ${now}.` : f < 1.08 ? `Here it barely helps: ${was} becomes ${now}.`
-        : `Same ${N.toLocaleString("en")} balls: the error drops from ${was} to ${now}. That is as good as ${fx(f)} more plain balls.`;
+      const implied = l === "A" ? ` That implies \u03c1 \u2248 ${MINUS((1 / f - 1).toFixed(2))}.` : l === "C" && f > 1 ? ` Ignoring the pilot, that implies \u03c1\u00b2 \u2248 ${(1 - 1 / f).toFixed(2)}.` : "";
+      trickBase[l] = f < 0.95 ? `At ${N.toLocaleString("en")} paths the 95% half-width grows from ${was} to ${now}: worse than plain here.` : f < 1.08 ? `At ${N.toLocaleString("en")} paths the 95% half-width goes from ${was} to ${now}: no real gain here.`
+        : `At ${N.toLocaleString("en")} paths the 95% half-width falls from ${was} to ${now}, a variance-reduction factor of ${fx(f)}.${implied}`;
       renderTrick(l);
     }, () => {});
   }
@@ -80,11 +81,13 @@
     const [name, sel] = CONFIG(step), key = name + sel;
     if (cur && cur.key === key) return cur.ready;
     const spec = SPECS[name], mine = ++token, exact = settled[name] ?? NaN, E = settledErr[name];
-    const cfg = (ex, e) => ({ spec, sel, seed: 7, exact: ex, ...(Number.isFinite(ex) && Number.isFinite(e) ? { gaugeRange: [ex - 1.6 * e, ex + 1.6 * e] } : {}) });
-    const keys = [`exact${name}`, `err${name}0200`, `trace${name}${sel}`, ...(sel ? [`trace${name}0`] : [])];
+    // gaugeRange: 1.6 plain 95% half-widths each side; funnel: 95% half-widths times sqrt(n), plain and with the methods
+    const cfg = (ex, e, em) => ({ spec, sel, seed: 7, exact: ex, ...(Number.isFinite(ex) && Number.isFinite(e) ? { gaugeRange: [ex - 1.6 * e, ex + 1.6 * e], funnel: [e * Math.sqrt(N), Number.isFinite(em) ? em * Math.sqrt(N) : NaN] } : {}) });
+    errOf(name, sel).catch(() => {});
+    const keys = [`exact${name}`, `err${name}0200`, `trace${name}${sel}`, ...(sel ? [`trace${name}0`] : [])], mk = `err${name}${sel}200`;
     if (keys.every((k) => done.has(k))) { // everything is known: set config, trace and compare together
       const [ex, pe, t, plain] = keys.map((k) => done.get(k));
-      board.set(cfg(ex, 1.96 * pe.real));
+      board.set(cfg(ex, 1.96 * pe.real, done.has(mk) ? 1.96 * done.get(mk).real : NaN));
       board.setTrace(t, word(sel));
       board.setCompare(sel ? plain : null);
       return (cur = { key, name, sel, ready: Promise.resolve() }).ready;
@@ -93,7 +96,8 @@
     const c = (cur = { key, name, sel });
     c.ready = Promise.all([exactOf(name), errOf(name, 0), traceOf(name, sel), sel ? traceOf(name, 0) : null]).then(([ex, pe, t, plain]) => {
       if (mine !== token) return;
-      if (!(exact === ex && E === 1.96 * pe.real)) board.set(cfg(ex, 1.96 * pe.real));
+      board.set(cfg(ex, 1.96 * pe.real, done.has(mk) ? 1.96 * done.get(mk).real : NaN));
+      errOf(name, sel).then((me) => { if (mine === token) board.set(cfg(ex, 1.96 * pe.real, 1.96 * me.real)); }, () => {});
       board.setTrace(t, word(sel));
       board.setCompare(sel ? plain : null);
     }).catch((e) => { if (e.message !== "stale") console.error(e); });
@@ -125,9 +129,9 @@
   let auto = Promise.resolve(), singles = 0, cleared = false;
   const toggleLabel = (l) => all(`section[data-step="${l}"] [data-act="toggle"] span`).forEach((x) => { x.textContent = `Turn ${l} ${off[l] ? "on" : "off"}`; });
   // a drop the page makes on its own; it never writes the lastBall readout
-  function autoDrop(n) {
+  function autoDrop(n, span) {
     auto = (async () => {
-      try { await cur.ready; lastDrop = n; await board.drop(n, { pace: "rain" }); } catch (e) { if (e && e.message !== "stale") console.error(e); }
+      try { await cur.ready; lastDrop = n; await board.drop(n, { pace: "rain", span }); } catch (e) { if (e && e.message !== "stale") console.error(e); }
     })();
     return auto;
   }
@@ -197,8 +201,9 @@
       const st = last(e.ST);
       if (!Number.isFinite(st)) return;
       const f = (x) => x.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const ex = settled[cur ? cur.name : "GBM"], wild = singles === 1 && Number.isFinite(ex) ? ` One ball is a wild guess: the true price is ${f(ex)}.` : "";
-      live("lastBall", (st > K ? `This ball landed at ${f(st)}, so the option pays ${f(st - K)}.` : `This ball landed at ${f(st)}, below the strike, so the option pays nothing.`) + wild);
+      const ex = settled[cur ? cur.name : "GBM"], wild = singles === 1 && Number.isFinite(ex) ? ` One path says little about the price, which is ${f(ex)}.` : "";
+      const disc = Math.exp(-GBM.r * GBM.T);
+      live("lastBall", (st > K ? `This path ends at S_T = ${f(st)}, so the call pays ${f(st - K)} at expiry, worth Y = ${f(disc * (st - K))} today.` : `This path ends at S_T = ${f(st)}, below the strike, so Y = 0.`) + wild);
     });
   }
 
@@ -213,18 +218,18 @@
     if (!host) return;
     cloud.W = Math.max(240, host.clientWidth);
     host.textContent = "";
-    const s = (cloud.svg = svgEl("svg", { width: "100%", height: CH, viewBox: `0 0 ${cloud.W} ${CH}`, role: "img", "aria-label": "Four rows of 40 experiments each" }, host));
+    const s = (cloud.svg = svgEl("svg", { width: "100%", height: CH, viewBox: `0 0 ${cloud.W} ${CH}`, role: "img", "aria-label": "Four rows of 40 estimates each" }, host));
     s.style.display = "block";
     s.style.overflow = "visible";
     const tr = reduced() ? "none" : "transform 500ms ease", mid = LEFT + (cloud.W - LEFT - RIGHT) / 2;
     cloud.mid = mid;
     cloud.line = svgEl("line", { x1: mid, x2: mid, y1: 18, y2: CH - 6, stroke: "#f2c200", "stroke-width": 3 }, s);
     cloud.tag = svgEl("text", { x: mid + 7, y: 12, class: "lab" }, s);
-    cloud.tag.textContent = "true price";
+    cloud.tag.textContent = "exact price";
     cloud.rows = ROWS.map((n, r) => {
       const y = TOP + r * PITCH, g = svgEl("g", {}, s);
       const name = svgEl("text", { x: 0, y: y + 4, class: "lab" }, g);
-      name.textContent = `${n.toLocaleString("en")} balls`;
+      name.textContent = `N = ${n.toLocaleString("en")}`;
       const dots = Array.from({ length: DOTS }, (_, i) => {
         const c = svgEl("circle", { r: 3.5, cx: 0, cy: 0, fill: "#14171a", "fill-opacity": 0.55 }, g), dy = y - 13 + 22 * jit(i * 7 + r);
         c.style.transition = tr; c.dataset.y = dy; c.style.transform = `translate(${mid}px, ${dy}px)`;
@@ -245,11 +250,11 @@
     // the error is 1.96 times the standard deviation of all the estimates about the exact price; the bracket sits on their mean
     const m = prices.reduce((a, b) => a + b, 0) / prices.length, e = 1.96 * Math.sqrt(prices.reduce((a, b) => a + (b - cloud.exact) ** 2, 0) / prices.length), x1 = X(m - e), x2 = X(m + e);
     const th = 1.96 * cloud.sigma1 / Math.sqrt(row.n);
-    row.theory.textContent = `theory \u00b1${th.toPrecision(2)}`;
+    row.theory.textContent = `predicted \u00b1${th.toPrecision(2)}`;
     row.brk.style.transform = `translate(${x1.toFixed(1)}px, ${row.y + 14}px) scaleX(${Math.max(1, x2 - x1).toFixed(1)})`;
     row.lab.textContent = `\u00b1${e.toPrecision(2)}`;
     row.err = e;
-    cloud.svg.setAttribute("aria-label", "Four rows of 40 experiments: " + cloud.rows.map((q) => (q.err != null ? `${q.n.toLocaleString("en")} balls, error \u00b1${q.err.toPrecision(2)}` : "")).filter(Boolean).join("; ") + ".");
+    cloud.svg.setAttribute("aria-label", "Four rows of 40 estimates: " + cloud.rows.map((q) => (q.err != null ? `${q.n.toLocaleString("en")} paths, 95% half-width \u00b1${q.err.toPrecision(2)}` : "")).filter(Boolean).join("; ") + ".");
   }
   async function cloudRun(r) {
     const run = ++cloud.runs[r], seed = 202 + r + 1000 * (run - 1);
@@ -305,7 +310,7 @@
     const rows = flags.map((f) => [f, vrf[f]]).sort((a, b) => b[1] - a[1]), top = Math.max(...rows.map((x) => x[1])), span = Math.log(Math.max(top, 1.5));
     host.innerHTML = rows.map(([f, v]) => {
       const w = v >= 1 ? Math.max(0.6, (100 * Math.log(v)) / span) : 0;
-      return `<li><button type="button" data-f="${f}" aria-pressed="${f === mixSel}" aria-label="${word(f)}: ${f ? fx(v) + " fewer paths" : "the yardstick"}"><span class="dots">${f ? dots(f) : '<i class="dot P">–</i>'}</span><span class="name">${f ? word(f) : "Plain"}</span><span class="track"><i style="width:${w.toFixed(1)}%"></i></span><span class="x${v < 0.95 ? " worse" : ""}">${f ? (v < 0.95 ? "worse" : fx(v)) : "1×"}</span></button></li>`;
+      return `<li><button type="button" data-f="${f}" aria-pressed="${f === mixSel}" aria-label="${word(f)}: ${f ? "variance-reduction factor " + fx(v) : "plain Monte Carlo"}"><span class="dots">${f ? dots(f) : '<i class="dot P">–</i>'}</span><span class="name">${f ? word(f) : "Plain"}</span><span class="track"><i style="width:${w.toFixed(1)}%"></i></span><span class="x${v < 0.95 ? " worse" : ""}">${f ? (v < 0.95 ? "worse" : fx(v)) : "1×"}</span></button></li>`;
     }).join("");
     host.addEventListener("click", async (e) => {
       const b = e.target.closest("button[data-f]");
@@ -329,7 +334,7 @@
     wireToggles();
     await setActive(active);
     onEnter(active);
-    if (active === "hero") autoDrop(240); // the hero comes alive once per page load (the board handles reduced motion)
+    if (active === "hero") autoDrop(1200, 7000); // the hero comes alive once per page load (the board handles reduced motion)
     ranking().catch((e) => { if (e.message !== "stale") console.error(e); });
   })();
 })();

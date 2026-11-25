@@ -20,20 +20,21 @@ const Views = (() => {
 
   // ------------------------------------------------------------------ board (the Galton board)
   let galton = null;
-  const BOARD_NOTE = { barrier: " Balls that touch the red wall are knocked out.", american: " Balls that cross the dashed line are exercised early.", asian: " Each ball is heaped by its average price, which is what this option pays on." };
+  const BOARD_NOTE = { barrier: " A path that crosses the barrier (red) is knocked out.", american: " A path that crosses the dashed exercise boundary is exercised early.", asian: " Each path is heaped by its arithmetic average, which is what this option pays on." };
   async function board(ctx) {
     show("board");
     Ink.clear();
     ctx.wait("");
     const { spec, sel, base, ref } = ctx, host = document.getElementById("lab-board");
     if (!galton) galton = Board.create(host, { gauge: true });
-    galton.set({ spec, sel, seed: base.seed, exact: ref, strata: base.strata });
-    ctx.tools(`<button type="button" class="tool" id="t-drop1">Drop 1</button><button type="button" class="tool" id="t-drop1k">Drop 1,000</button><button type="button" class="tool" id="t-clear">Clear</button>`);
+    const pe = ctx.results.get(0), me = ctx.results.get(sel), h = (e) => (e ? 1.96 * e.real : NaN);
+    galton.set({ spec, sel, seed: base.seed, exact: ref, strata: base.strata, ...(pe && Number.isFinite(ref) ? { gaugeRange: [ref - 1.6 * h(pe), ref + 1.6 * h(pe)], funnel: [h(pe) * Math.sqrt(base.n), h(me) * Math.sqrt(base.n)] } : {}) });
+    ctx.tools(`<button type="button" class="tool" id="t-drop1">Simulate 1</button><button type="button" class="tool" id="t-drop1k">Simulate 1,000</button><button type="button" class="tool" id="t-clear">Clear</button>`);
     const run = (n) => galton.drop(n).catch(() => {});
     document.getElementById("t-drop1").onclick = () => run(1);
     document.getElementById("t-drop1k").onclick = () => run(1000);
     document.getElementById("t-clear").onclick = () => galton.clear();
-    ctx.caption("Each ball is one simulated future. The needle is the engine’s own estimate after that many balls, and the yellow bar is the true price. Switch tricks on the right and watch the needle calm down." + (BOARD_NOTE[spec.product] || ""));
+    ctx.caption("Each ball is one simulated path and lands at its final price. The needle is the engine’s estimate after n paths and the yellow mark is the exact price. Turn methods on at the right and compare the needle with plain Monte Carlo (grey)." + (BOARD_NOTE[spec.product] || ""));
     const trace = (f) => {
       const key = JSON.stringify(["board", spec, base.n, base.seed, base.strata, f]);
       if (!ctx.cache.has(key)) {
@@ -345,7 +346,9 @@ const Views = (() => {
     Ink.clear();
     ctx.wait("");
     ctx.tools("");
-    document.getElementById("sheet").innerHTML = `<p class="lead">${NOTES.product[ctx.spec.product]}</p>` + NOTES.html;
+    const sheet = document.getElementById("sheet");
+    sheet.innerHTML = `<div class="lead">${NOTES.product[ctx.spec.product]}</div>` + NOTES.html;
+    Tex.fill(sheet);
     ctx.caption("");
   }
 

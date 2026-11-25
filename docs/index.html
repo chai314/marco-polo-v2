@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Marco Polo · price an option by dropping balls</title>
-<meta name="description" content="A playful lab: price an option by dropping thousands of balls through a Galton board, then learn four tricks that get the same answer with far fewer balls. A C++ engine running live in your browser.">
+<title>Marco Polo · variance reduction for option pricing</title>
+<meta name="description" content="Monte Carlo option pricing with antithetic variates, control variates, stratified sampling and conditional Monte Carlo, in every combination, measured at equal cost against exact prices. A C++ engine running in your browser.">
 <meta name="theme-color" content="#14171a">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314171a'/%3E%3Cpath d='M5 24C10 24 12 8 16 8s6 16 11 16' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
@@ -15,7 +15,7 @@
     <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="7" r="3"/><circle cx="10" cy="16" r="3"/><circle cx="22" cy="16" r="3"/><circle cx="4" cy="25" r="3"/><circle cx="16" cy="25" r="3"/><circle cx="28" cy="25" r="3"/></svg>
     <span class="wm">Marco Polo</span>
   </a>
-  <nav class="jump" aria-label="Sections"><a href="#story">The story</a><a href="#lab">The lab</a></nav>
+  <nav class="jump" aria-label="Sections"><a href="#story">Methods</a><a href="#lab">Lab</a></nav>
   <p id="status" class="status" aria-live="polite"><span class="pulse" aria-hidden="true"></span><span id="status-text">Starting the engine</span></p>
 </header>
 
@@ -25,83 +25,105 @@
   </div>
   <div class="steps">
     <section class="step hero" data-step="hero" aria-labelledby="h-hero">
-      <h1 id="h-hero">Price an option by dropping balls</h1>
-      <p class="lead">Nobody knows where a stock will be in six months. So we imagine thousands of possible futures, check what the option pays in each one, and take the average. That average is the price.</p>
-      <p>This little lab shows how that works. Then it shows four tricks that get the same answer with far fewer balls.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="1"><span>Drop a ball</span></button><a class="skip" href="#lab">Skip to the lab</a></div>
-      <p class="note">Everything here runs live in your browser on a C++ engine. Nothing is a recording.</p>
+      <h1 id="h-hero">The same price from fewer paths</h1>
+      <p class="lead">An option’s price is an expected payoff. Monte Carlo estimates it by simulating the stock many times and averaging the discounted payoffs. The estimate has no bias, but its error falls only like <span data-tex="1/\sqrt N"></span>.</p>
+      <div class="eq" data-eq="V_0=e^{-rT}\,\E^{\Q}\big[(S_T-K)^+\big]\;\approx\;\widehat V_N=\frac1N\sum_{i=1}^{N}Y_i"></div>
+      <p>This page runs that estimator one path at a time. It then adds four variance-reduction methods, which give the same expectation with a smaller variance at the same number of paths.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="1"><span>Simulate one path</span></button><a class="skip" href="#lab">Skip to the lab</a></div>
+      <p class="note">Every number is computed in your browser by a C++ engine compiled to WebAssembly. Nothing is precomputed.</p>
     </section>
 
     <section class="step" data-step="one" aria-labelledby="h-one">
-      <h2 id="h-one">One ball, one future</h2>
-      <p>The ball starts at today’s price of <b data-live="ticker">SPY</b>, <b data-live="S0">718.78</b>. Each row of pins is a step forward in time. At every step the ball gets a random nudge, left or right, big or small. Where it lands is the stock price on expiry day, <b data-live="T">half a year</b> from now.</p>
-      <p>Our option is a <b>call</b> with a strike of <b data-live="K">719</b>. It pays whatever the price ends above <b data-live="K">719</b>. If the price ends below, it pays nothing.</p>
-      <p class="readout" data-live="lastBall">Drop a ball to see what it pays.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="1"><span>Drop another</span></button></div>
+      <h2 id="h-one">One ball is one path</h2>
+      <p>Under the risk-neutral measure <span data-tex="\Q"></span>, the stock follows geometric Brownian motion with rate <span data-tex="r"></span>, dividend yield <span data-tex="q"></span> and volatility <span data-tex="\sigma"></span>. The log-price has Gaussian increments, so the path can be simulated exactly on any grid of dates:</p>
+      <div class="eq" data-eq="S_{t_{j+1}}=S_{t_j}\exp\!\Big[\big(r-q-\tfrac12\sigma^2\big)\Delta t+\sigma\sqrt{\Delta t}\,Z_{j+1}\Big],\qquad Z_j\overset{\text{iid}}{\sim}\N(0,1)"></div>
+      <p>Each row of pins is a date, and the horizontal position is <span data-tex="\ln S_t"></span>. The ball starts at <span data-tex="S_0"></span> = <b data-live="S0">718.78</b>, the close of <b data-live="ticker">SPY</b>, and lands at <span data-tex="S_T"></span>, <b data-live="T">half a year</b> later. The contract is a European call with strike <span data-tex="K"></span> = <b data-live="K">719</b>, so the path’s discounted payoff is</p>
+      <div class="eq" data-eq="Y=e^{-rT}\,(S_T-K)^+"></div>
+      <p class="readout" data-live="lastBall">Simulate a path to see its payoff.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="1"><span>Simulate another</span></button></div>
+      <p class="aside">The board draws each path to the nearest pin. Where it lands, and what it pays, is exact.</p>
     </section>
 
     <section class="step" data-step="many" aria-labelledby="h-many">
-      <h2 id="h-many">Many balls, one calm average</h2>
-      <p>One ball is a wild guess. The average of many balls is calm. The needle under the board shows the average payoff so far.</p>
-      <p>The yellow band is the true price, <b data-live="exact">46.53</b>, from the Black–Scholes formula. We only use it to check our work. The balls never see it.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
-      <p class="readout">With <b data-live="N">2,000</b> balls the needle usually stops within <span class="pm" data-live="err:0">±2.4</span> of the truth. “Usually” means 19 times out of 20.</p>
+      <h2 id="h-many">The sample mean</h2>
+      <p>With <span data-tex="N"></span> independent paths, the estimator is the sample mean of their payoffs. Its expectation is the price, for every <span data-tex="N"></span>:</p>
+      <div class="eq" data-eq="\widehat V_N=\frac1N\sum_{i=1}^{N}Y_i,\qquad \E\big[\widehat V_N\big]=V_0"></div>
+      <p>For this contract the price is known in closed form, so we can check the estimator against it. Black and Scholes give <b data-live="exact">46.53</b>:</p>
+      <div class="eq" data-eq="V_0=S_0e^{-qT}\Phi(d_1)-Ke^{-rT}\Phi(d_2),\qquad d_{1,2}=\frac{\ln(S_0/K)+(r-q\pm\frac12\sigma^2)T}{\sigma\sqrt T}"></div>
+      <p>The simulation never uses it: the yellow mark is there only to check against.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Simulate 2,000</span></button></div>
+      <p class="readout">By the central limit theorem, <span data-tex="\widehat V_N\pm1.96\,s_N/\sqrt N"></span> covers <span data-tex="V_0"></span> with probability close to 95%. With <span data-tex="N"></span> = <b data-live="N">2,000</b> the half-width is <span class="pm" data-live="err:0">±3.0</span>.</p>
     </section>
 
     <section class="step" data-step="cost" aria-labelledby="h-cost">
-      <h2 id="h-cost">The catch: four times the balls, half the error</h2>
-      <p>The error shrinks with the square root of the number of balls. Four times the balls only halves it. One more correct digit costs a hundred times the balls.</p>
-      <p>Try it. Each dot below is a whole experiment. Watch how slowly the cloud of answers tightens.</p>
+      <h2 id="h-cost">The error falls like <span data-tex="1/\sqrt N"></span></h2>
+      <p>The variance of a mean of <span data-tex="N"></span> independent draws is the variance of one draw divided by <span data-tex="N"></span>, so</p>
+      <div class="eq" data-eq="\SE\big(\widehat V_N\big)=\frac{\sigma_Y}{\sqrt N},\qquad \sigma_Y^2=\Var(Y)"></div>
+      <p>Here <span data-tex="\sigma_Y"></span> ≈ <b data-live="sigY">68</b>. Halving the error takes four times the paths, and one more correct digit takes a hundred times. Each dot below is a complete estimate; each row uses four times the paths of the row above.</p>
       <div class="cloud-wrap">
-        <div class="seg" role="radiogroup" aria-label="Balls in each experiment"><button type="button" role="radio" data-act="cloud" data-n="500">500</button><button type="button" role="radio" data-act="cloud" data-n="2000">2,000</button><button type="button" role="radio" data-act="cloud" data-n="8000">8,000</button><button type="button" role="radio" data-act="cloud" data-n="32000">32,000</button></div>
+        <div class="seg" role="radiogroup" aria-label="Paths in each estimate"><button type="button" role="radio" data-act="cloud" data-n="500">500</button><button type="button" role="radio" data-act="cloud" data-n="2000">2,000</button><button type="button" role="radio" data-act="cloud" data-n="8000">8,000</button><button type="button" role="radio" data-act="cloud" data-n="32000">32,000</button></div>
         <div id="cloud" class="cloud" aria-live="polite"></div>
       </div>
-      <p>So let’s cheat, legally. Each trick below keeps the answer right on average. It just makes every experiment less wild. We always compare at the same number of balls, and if a trick costs extra work, we count that too.</p>
+      <p>The rate <span data-tex="1/\sqrt N"></span> cannot be changed, but the constant <span data-tex="\sigma_Y"></span> can. A variance-reduction method replaces <span data-tex="Y"></span> with another unbiased estimator of <span data-tex="V_0"></span> that has a smaller variance. We score it at equal cost: the variance-reduction factor is how many times more plain paths give the same error.</p>
+      <div class="eq" data-eq="\mathrm{VRF}=\frac{N_{\mathrm{plain}}\,\Var\big(\widehat V_{\mathrm{plain}}\big)}{N_{\mathrm{method}}\,\Var\big(\widehat V_{\mathrm{method}}\big)}"></div>
+      <p class="aside">Every path counts towards <span data-tex="N"></span>, including the reflected paths of antithetic sampling and the pilot run of the control variate.</p>
     </section>
 
     <section class="step trick" data-step="A" style="--c:var(--A)" aria-labelledby="h-A">
-      <h2 id="h-A"><i class="disc">A</i>Trick A: mirror twins</h2>
-      <p>For every ball, we drop a twin that gets the opposite nudge at every pin. When one flies far right, the other flies far left.</p>
-      <p>For a call, one twin often pays a lot while the other pays little. Their average swings much less than the average of two strangers.</p>
-      <p class="aside">This works when the payoff only moves one way as the price rises, as it does for a call or a put. Each twin costs a full ball, and we count it.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2"><span>Drop a pair</span></button><button type="button" class="press ghost" data-act="drop" data-n="2000"><span>Drop 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn A off</span></button></div>
+      <h2 id="h-A"><i class="disc">A</i>Antithetic variates</h2>
+      <p>The vector <span data-tex="-Z"></span> has the same distribution as <span data-tex="Z"></span>, so the reflected path is an equally valid sample. Every path is paired with its reflection, and the pair’s average is one draw:</p>
+      <div class="eq" data-eq="\widehat V_{\A{A}}=\frac{1}{N/2}\sum_{i=1}^{N/2}\frac{Y(Z_i)+Y(-Z_i)}{2},\qquad \Var\big(\widehat V_{\A{A}}\big)=\frac{\sigma_Y^2}{N}\,(1+\A{\rho})"></div>
+      <p>where <span data-tex="\A{\rho}=\Corr\big(Y(Z),Y(-Z)\big)"></span>. If the payoff is monotone in each <span data-tex="Z_j"></span>, as a call’s is, then <span data-tex="\A{\rho}\le0"></span> and the pair beats two independent paths. On the board the reflected path is blue.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2"><span>Simulate a pair</span></button><button type="button" class="press ghost" data-act="drop" data-n="2000"><span>Simulate 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn A off</span></button></div>
       <p class="readout" data-live="trick:A"></p>
+      <p class="aside">Glasserman, section 4.2.</p>
     </section>
 
     <section class="step trick" data-step="S" style="--c:var(--S)" aria-labelledby="h-S">
-      <h2 id="h-S"><i class="disc">S</i>Trick S: a fair share for every lane</h2>
-      <p>Random balls bunch up by luck: too many in one spot, too few in another. So we cut the landing zone into 32 lanes that are all equally likely, and send exactly the same number of balls down each one.</p>
-      <p>The luck of which lane a ball picks is gone. Only the luck inside each lane is left.</p>
-      <p class="aside">Under the hood, we fix where each path is headed overall, then fill in the day-to-day wiggles at random.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn S off</span></button></div>
+      <h2 id="h-S"><i class="disc">S</i>Stratified sampling</h2>
+      <p>The payoff of a European option depends on the path only through <span data-tex="X=W_T/\sqrt T\sim\N(0,1)"></span>. Its range is cut into <span data-tex="H"></span> = 32 strata of equal probability, and each stratum gets exactly <span data-tex="N/H"></span> paths:</p>
+      <div class="eq" data-eq="X_{h}=\Phi^{-1}\!\Big(\frac{h-1+U}{H}\Big),\qquad U\sim\mathcal U(0,1),\quad h=1,\dots,H"></div>
+      <p>The law of total variance splits <span data-tex="\Var(Y)"></span> into a part within strata and a part between them. With proportional allocation the second part is gone:</p>
+      <div class="eq" data-eq="\Var(Y)=\E\big[\Var(Y\mid h)\big]+\Var\big(\E[Y\mid h]\big),\qquad \Var\big(\widehat V_{\Sc{S}}\big)=\frac1N\,\E\big[\Var(Y\mid h)\big]"></div>
+      <p>The rest of the path is drawn from its conditional law given the stratified value: with <span data-tex="a=(1,\dots,1)/\sqrt m"></span>, set <span data-tex="Z=aX+(I-aa^{\top})\tilde Z"></span> with <span data-tex="\tilde Z\sim\N(0,I)"></span>.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Simulate 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn S off</span></button></div>
       <p class="readout" data-live="trick:S"></p>
+      <p class="aside">Glasserman, section 4.3. The green bars under the board count the paths in each stratum.</p>
     </section>
 
     <section class="step trick" data-step="C" style="--c:var(--C)" aria-labelledby="h-C">
-      <h2 id="h-C"><i class="disc">C</i>Trick C: check against an answer key</h2>
-      <p>There is one thing we know exactly: the average final price of the stock itself. So we track it on the same balls.</p>
-      <p>If the balls happen to land too high, the stock average comes out too high. The option estimate is then probably too high as well. We know the stock’s mistake exactly, so we subtract a matching share of it from the option.</p>
-      <p class="aside">That share is called β. We learn it from a small separate trial run, so the trick never tilts the answer.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn C off</span></button></div>
+      <h2 id="h-C"><i class="disc">C</i>Control variates</h2>
+      <p>The discounted stock price <span data-tex="C=e^{-rT}S_T"></span> is computed on the same paths, and its expectation <span data-tex="\E[C]=S_0e^{-qT}"></span> is known exactly. Its sample error predicts part of the option’s sample error, so we subtract a multiple of it:</p>
+      <div class="eq" data-eq="\widehat V_{\C{C}}=\frac1N\sum_{i=1}^{N}\Big[Y_i-\C{\beta}\big(C_i-\E[C]\big)\Big],\qquad \C{\beta}^{\star}=\frac{\Cov(Y,C)}{\Var(C)}"></div>
+      <p>With the optimal coefficient the variance falls by the squared correlation between payoff and control:</p>
+      <div class="eq" data-eq="\Var\big(\widehat V_{\C{C}}\big)=\frac{\sigma_Y^2}{N}\,\big(1-\rho_{YC}^2\big)"></div>
+      <p><span data-tex="\C{\beta}"></span> is estimated on a separate pilot run, 5% of the budget, with its own random numbers. Given the pilot it is a constant, and <span data-tex="\E\big[Y-\C{\beta}(C-\E[C])\big]=\E[Y]"></span> for any constant, so the estimator stays unbiased. Estimating <span data-tex="\C{\beta}"></span> on the same paths would add a bias of order <span data-tex="1/N"></span>.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Simulate 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn C off</span></button></div>
       <p class="readout" data-live="trick:C"></p>
+      <p class="aside">Glasserman, section 4.1. The orange strip under the gauge is the control’s running mean against <span data-tex="\E[C]"></span>.</p>
     </section>
 
     <section class="step trick" data-step="K" style="--c:var(--K)" aria-labelledby="h-K">
-      <h2 id="h-K"><i class="disc">K</i>Trick K: let a formula roll the dice</h2>
-      <p>Now let the stock jump. About <b data-live="lam">0.43</b> times a year, it drops suddenly, by <b data-live="muJ">28%</b> on a typical jump. The market’s option prices tell us to expect this.</p>
-      <p>Jumps change the true price too: the yellow band moves to <b data-live="exactJ">47.30</b>, now from Merton’s formula for a jumping stock.</p>
-      <p>Here is the trick. Once we know how many jumps happen, the rest of the path is smooth, and a formula prices it exactly. So we roll dice only for the number of jumps. The formula does the rest.</p>
-      <p class="aside">For barrier options, K works differently. Instead of checking whether a ball touched the barrier, we compute the chance that it brushed it between two rows of pins.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn K off</span></button></div>
+      <h2 id="h-K"><i class="disc">K</i>Conditional Monte Carlo</h2>
+      <p>Now let the stock jump. In Merton’s model a Poisson process <span data-tex="N_t"></span> with intensity <span data-tex="\lambda"></span> = <b data-live="lam">0.43</b> a year multiplies the price by <span data-tex="e^{J}"></span> at each jump, with <span data-tex="J\sim\N(\mu_J,\delta^2)"></span> and <span data-tex="\mu_J"></span> = <b data-live="muJ">−0.28</b>, fitted to the option quotes:</p>
+      <div class="eq" data-eq="\frac{\dd S_t}{S_{t^-}}=(r-q-\lambda\kappa)\,\dd t+\sigma\,\dd W_t+\big(e^{J}-1\big)\,\dd N_t,\qquad \kappa=e^{\mu_J+\delta^2/2}-1"></div>
+      <p>The exact price becomes <b data-live="exactJ">47.30</b>. Given the number of jumps <span data-tex="N_T=n"></span>, <span data-tex="\ln S_T"></span> is Gaussian, so the conditional expectation is a Black–Scholes price with forward <span data-tex="F_n=S_0e^{(r-q-\lambda\kappa)T}(1+\kappa)^n"></span> and variance <span data-tex="\sigma_n^2T=\sigma^2T+n\delta^2"></span>:</p>
+      <div class="eq" data-eq="\E\big[Y\mid N_T=n\big]=e^{-rT}\big[F_n\Phi(d_1^{(n)})-K\Phi(d_2^{(n)})\big],\qquad d_{1,2}^{(n)}=\frac{\ln(F_n/K)\pm\frac12\sigma_n^2T}{\sigma_n\sqrt T}"></div>
+      <p>So we simulate only <span data-tex="N_T"></span> and average the formula. By the law of total variance this can only help:</p>
+      <div class="eq" data-eq="\Var\big(\E[Y\mid N_T]\big)=\Var(Y)-\E\big[\Var(Y\mid N_T)\big]\;\le\;\Var(Y)"></div>
+      <p>The rings on the board are paths whose diffusion part is integrated out; only their jump count was drawn.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Simulate 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn K off</span></button></div>
       <p class="readout" data-live="trick:K"></p>
+      <p class="aside">For a barrier option, K conditions on the simulated dates instead: the probability that a Brownian bridge between two dates touches the barrier is known, <span data-tex="p_j=\exp\!\big(-2\ln(S_{t_j}/H)\ln(S_{t_{j+1}}/H)/(\sigma^2\Delta t)\big)"></span>, and the estimator multiplies the survival probabilities instead of checking for a crossing. Glasserman, sections 3.5.1, 4.7 and 6.4.</p>
     </section>
 
     <section class="step" data-step="mix" aria-labelledby="h-mix">
-      <h2 id="h-mix">Mix the tricks</h2>
-      <p>Tricks can be combined. Sometimes their gains multiply. Sometimes they fight over the same noise: S and C both go after where the ball ends up, so together they are not twice as good.</p>
-      <p>Here are all 15 combinations for the jumping stock, plus plain for comparison, each with the same budget. Tap one to bolt it onto the board.</p>
+      <h2 id="h-mix">Combining methods</h2>
+      <p>The methods act on different parts of the estimator: A and S change how the normals are drawn, C corrects the output, and K replaces <span data-tex="Y"></span> with a conditional expectation. So they can be combined, but their gains need not multiply. S and C both remove the part of the variance explained by <span data-tex="S_T"></span>, so together they are worth little more than either alone. With K and C, what remains is</p>
+      <div class="eq" data-eq="\Var\big(\widehat V_{\C{C}+\K{K}}\big)=\frac{1-R^2}{N}\,\Var\big(\E[Y\mid N_T]\big)"></div>
+      <p>where <span data-tex="R^2"></span> is the share of the conditional price’s variance explained by the controls. Here are all 15 combinations for the jump model, each at the same number of paths. Choose one to show it on the board.</p>
       <ol id="story-rank" class="story-rank"></ol>
-      <p class="aside">Measured from 120 runs of 2,000 balls on this one market, so each factor is good to about ±25%. Treat them as sizes, not exact scores.</p>
+      <p class="aside">Each factor comes from 120 independent runs of 2,000 paths on this one contract, so it is accurate to roughly ±25%.</p>
       <div class="acts"><a class="press" href="#lab"><span>Open the lab</span></a></div>
     </section>
   </div>
@@ -110,8 +132,8 @@
 <section id="lab" class="lab" aria-labelledby="h-lab">
   <header class="lab-head">
     <h2 id="h-lab">The lab</h2>
-    <p>Every option, every stock, every trick. Change anything and everything reprices live. Drag a field’s name sideways to scrub its number.</p>
-    <p class="hints"><b>Strata</b> is how many equal lanes trick S uses. <b>Seed</b> picks the random numbers: the same seed gives the same balls. <b>Jump vol</b> is how much the jump sizes vary. <b>Paths a run</b> is the number of balls in one experiment.</p>
+    <p>Every product, underlying and combination of methods. Any change reprices everything. Drag a field’s label sideways to change its value.</p>
+    <p class="hints"><b>Paths a run</b> is <span data-tex="N"></span> for one estimate. <b>Strata</b> is <span data-tex="H"></span> for stratified sampling. <b>Seed</b> fixes the random numbers, so the same seed gives the same paths. <b>Jump vol</b> is <span data-tex="\delta"></span>, the standard deviation of the log jump size.</p>
   </header>
 <form id="form" class="sheet" autocomplete="off" aria-label="Contract and budget" novalidate>
   <div class="products" role="tablist" aria-label="Product">
@@ -189,20 +211,22 @@
   </aside>
 </div>
   <aside class="fine" aria-labelledby="h-fine">
-    <h2 id="h-fine">The fine print, in plain words</h2>
+    <h2 id="h-fine">How the numbers are measured</h2>
     <ul>
-      <li><b>Balls are the engine’s real paths.</b> The board draws paths from the same random-number generator the engine uses. The needle and every error bar come from the engine’s own estimates, not from the animation.</li>
-      <li><b>Error bars can be too small.</b> When the spread we actually see across repeated runs is clearly bigger than the error a run reports about itself, we use the bigger one and say so. This happens with rare jumps: a short run may see none.</li>
-      <li><b>Two estimators lean slightly.</b> American options (priced by Longstaff–Schwartz) and barriers checked only on a grid of dates are a little biased. We measure their spread around their own average and show the lean separately.</li>
-      <li><b>Speeds are rough.</b> Timings come from one thread in your browser and are noisy.</li>
-      <li><b>Data.</b> Prices and option quotes for SPY, QQQ, IWM, AAPL, MSFT and NVDA at the close of 24 November 2026, from Yahoo Finance; the three-month Treasury rate from FRED. You can switch to a synthetic market drawn in your browser.</li>
-      <li><b>Checks.</b> Every price is compared with one that was not simulated: Black–Scholes, Merton’s series, a quadrature for the Asian, Reiner–Rubinstein for barriers and a lattice for the American put. The browser engine matches the native C++ build to nine digits.</li>
+      <li><b>The board is the engine’s paths.</b> Balls are drawn from the same generator and model as the engine. For a European option the engine samples <span data-tex="S_T"></span> in one step, which is exact; the board shows intermediate dates from the same law. The gauge and every error come from the engine’s own estimates.</li>
+      <li><b>Reported errors can be too small.</b> If the variance across repeated runs exceeds the mean reported variance by more than sampling noise allows (at least 25%), the observed variance is used and the page says so. This happens under jumps: a short run may contain no jump.</li>
+      <li><b>Two estimators are biased.</b> Longstaff–Schwartz prices the American put with an estimated exercise rule, which is suboptimal, so it is biased low. A barrier monitored only on a grid misses crossings between dates. For both, variance is measured about the estimator’s own mean and the bias is reported separately.</li>
+      <li><b>Run times are rough.</b> They come from one thread in your browser.</li>
+      <li><b>Data.</b> Closes and option quotes for SPY, QQQ, IWM, AAPL, MSFT and NVDA at 24 November 2026 from Yahoo Finance, and the three-month Treasury yield from FRED. The page can also generate a synthetic market, and says so when it does.</li>
+      <li><b>Checks.</b> Every price is compared with one that was not simulated: Black–Scholes, Merton’s series, numerical integration for the arithmetic Asian, Reiner–Rubinstein for barriers and a lattice for the American put. The WebAssembly engine agrees with the native C++ to nine digits.</li>
     </ul>
   </aside>
 </section>
 <footer class="foot"><p>Marco Polo: variance reduction for Monte Carlo option pricing. <a href="https://github.com/chai314/marco-polo-v2">Source code</a></p></footer>
 <div id="tip" class="tip" role="status" hidden></div>
 <noscript><p class="noscript">This page prices options in your browser and needs JavaScript.</p></noscript>
+<script src="js/math.js" defer></script>
+<script src="js/tex.js" defer></script>
 <script src="js/engine.wasm.js" defer></script>
 <script src="js/market.js" defer></script>
 <script src="js/engine.js" defer></script>

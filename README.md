@@ -16,14 +16,14 @@ On GitHub Pages it is served from the `docs/` folder.
 
 ## What is on the page
 
-**The story.** A guided walk through a Galton board, the bean machine that turns randomness into a bell curve. Every ball is one simulated future of the stock: it falls through the pins along its real simulated path and lands at its price on expiry day. The option's price is the average payoff, and a needle under the board shows that average settling on the true price (the yellow bar). Chapters then bolt on one trick at a time, each with its own gadget on the board:
+**Methods.** A walk through the estimator and the four methods, with the mathematics typeset by LaTeX, beside a Galton board on which every ball is one simulated path. A ball hops from date to date, drawn to the nearest pin, and lands at its exact final price; pins darken where more paths have passed, and the pile fills the density of ln S_T. A gauge shows the running estimate against the exact price and, on wide screens, a tape of the estimate against n inside its 95% band. One section per method:
 
-- **A, mirror twins** (antithetic variates): every ball is dropped with a twin that gets the opposite nudge at every pin.
-- **S, a fair share for every lane** (stratification): the landing zone is cut into 32 equally likely lanes, and each gets the same number of balls.
-- **C, an answer key** (control variate): the stock's own average, whose true value is known, corrects the option's estimate.
-- **K, skip the dice** (conditioning): with jumps, only the number of jumps is rolled; a formula does the rest.
+- **A, antithetic variates**: each path is paired with its reflection, Z and −Z; the reflected paths are blue.
+- **S, stratified sampling**: the terminal normal is drawn from 32 strata of equal probability, the rest of the path from its conditional law.
+- **C, control variates**: the discounted stock, whose mean is known, corrects the estimate, with β fitted on a separate pilot run.
+- **K, conditional Monte Carlo**: under Merton jumps only the jump count is simulated and the Black–Scholes formula does the rest.
 
-Each chapter reports, live, how much smaller the error gets for the same number of balls. The last chapter ranks all 15 combinations.
+Each section reports, live, the 95% half-width with and without the method at the same number of paths, and the variance-reduction factor. The last section ranks all 15 combinations.
 
 **The lab.** Every product (European, Asian, barrier, American), stock and setting, with five views: the board, convergence of 64 runs against the exact price, the paths, the market data and its fitted jump model, and notes on each method. Drag a field's name sideways to scrub its number.
 
@@ -61,7 +61,7 @@ cmake -S cpp -B cpp/build && cmake --build cpp/build && cpp/build/vropt_tests
 python tools/build_site.py
 ```
 
-`tools/build_site.py` rebuilds `docs/js/engine.wasm.js` (needs `ziglang`) and `docs/js/market.js` from `data/`. Both outputs are committed, so the site needs no build step.
+`tools/build_site.py` rebuilds `docs/js/engine.wasm.js` (needs `ziglang`) and `docs/js/market.js` from `data/`. `tools/build_math.py` typesets every formula on the page (the TeX in `data-eq` and `data-tex` attributes) with `latex` and `dvisvgm` into `docs/js/math.js`. All outputs are committed, so the site needs no build step.
 
 ## Data
 
@@ -69,4 +69,4 @@ Closing prices, option chains and dividend yields for SPY, QQQ, IWM, AAPL, MSFT 
 
 ## Sources
 
-Section numbers on the page refer to Glasserman, *Monte Carlo Methods in Financial Engineering* (2004). Also Longstaff and Schwartz (2001), Merton (1976), and Broadie, Glasserman and Kou (1997). Set in TeX Gyre Heros and Latin Modern Math, under the GUST font licence (`docs/fonts`).
+Section numbers on the page refer to Glasserman, *Monte Carlo Methods in Financial Engineering* (2004). Also Longstaff and Schwartz (2001), Merton (1976), and Broadie, Glasserman and Kou (1997). Set in TeX Gyre Heros, under the GUST font licence (`docs/fonts`); formulas are typeset by LaTeX in Latin Modern.

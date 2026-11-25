@@ -1,14 +1,16 @@
 // The Galton board: every ball is one simulated price path from the engine. Time runs down, price runs across (log scale).
-// Balls fall along their real paths, land in a heap at their final price, and a gauge strip compares the running estimate with the true price.
-// Layers, back to front: a 2D canvas (pins, payoff tint, the heap), an SVG overlay (lines, labels, trails, gauge), a ball canvas (WebGL2 points, or 2D).
+// A ball hops from date to date under constant gravity, is drawn to the nearest pin on the way (barrier and American paths are drawn exactly),
+// and lands at its exact final price. A gauge compares the running estimate with the exact price; on wide boards it also draws a tape of the
+// estimate against n, with the 95% band.
+// Layers, back to front: a 2D canvas (payoff tint; without WebGL also pins and heap), a ball canvas (WebGL2 points, or 2D), an SVG overlay.
 "use strict";
 
 const Board = (() => {
   const NP = 2048, FONT = 'Heros, "Helvetica Neue", Helvetica, Arial, sans-serif', NS = "http://www.w3.org/2000/svg";
-  const INK = "#14171a", PALE = "#b9bfc6", MUTE = "#5f666f", PIN = "#d3d7dc", RULE = "#c9ced4", GHOST = "#8a9097";
+  const INK = "#14171a", PALE = "#b9bfc6", SKY = "#a9c0ea", MUTE = "#5f666f", PIN = "#d3d7dc", RULE = "#c9ced4", GHOST = "#8a9097";
   const BLUE = "#1657c9", GREEN = "#10936a", GREEN_D = "#0b6b4d", ORANGE = "#ec6a00", ORANGE_D = "#b34e00", VIOLET = "#a8328f", RED = "#bf3a2f", YELLOW = "#f2c200";
   const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
-  const C = { ink: rgb(INK), pale: rgb(PALE), blue: rgb(BLUE), red: rgb(RED), violet: rgb(VIOLET), ghost: rgb("#9aa0a7") };
+  const C = { ink: rgb(INK), pale: rgb(PALE), sky: rgb(SKY), pin: rgb(PIN), pinHot: rgb("#6b727b"), blue: rgb(BLUE), red: rgb(RED), violet: rgb(VIOLET), ghost: rgb("#9aa0a7") };
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const isFlat = (p) => p === "european" || p === "merton";
   const fmtN = (n) => Math.round(n).toLocaleString("en");
@@ -124,7 +126,7 @@ const Board = (() => {
     svg.setAttribute("font-family", FONT);
     live.setAttribute("aria-live", "polite");
     live.style.cssText = "position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0";
-    host.append(back, svg, front, live);
+    host.append(back, front, svg, live);
     const bctx = back.getContext("2d");
     const wantGL = !new URLSearchParams(location.search).has("canvas");
     let gl = wantGL ? front.getContext("webgl2", { antialias: false, alpha: true, premultipliedAlpha: true }) : null, fctx = null, prog, vao, vbuf, loc = {};
@@ -144,7 +146,7 @@ const Board = (() => {
     const show = () => ({ pins: true, heap: true, gauge: true, trail: "auto", ...(cfg?.show || {}) });
 
     function fresh() {
-      return { gen: (S?.gen || 0) + 1, cur: null, first: null, loading: null, batchNo: 0, scale: null, active: [], launchQ: [], qi: 0, clock: S?.clock || 0, count: 0, sums: { pay: 0, pay2: 0, st: 0, st2: 0 }, landed: { ln: [], cls: [], alpha: [], bin: [], slot: [], avg: [], twin: [] }, binCount: null, reserved: null, maxRes: 0, pitch: 0, trays: [0, 0, 0, 0], lanes: new Int32Array(32), dirty: true, drops: [], trails: [], routes: {}, chips: [], last: null, needleSettled: true, gaugeDirty: true };
+      return { gen: (S?.gen || 0) + 1, cur: null, first: null, loading: null, batchNo: 0, scale: null, active: [], launchQ: [], qi: 0, clock: S?.clock || 0, count: 0, sums: { pay: 0, pay2: 0, st: 0, st2: 0 }, landed: { ln: [], cls: [], alpha: [], bin: [], slot: [], avg: [], twin: [] }, binCount: null, reserved: null, maxRes: 0, pitch: 0, trays: [0, 0, 0, 0], lanes: new Int32Array(32), dirty: true, drops: [], trails: [], chips: [], hist: [], planned: 0, futureRes: 0, hits: new Map(), maxHit: 0, curveKey: "", last: null, needleSettled: true, gaugeDirty: true };
     }
     S = fresh();
 
@@ -170,26 +172,41 @@ const Board = (() => {
       for (const c of [back, front]) { c.width = Math.round(W * dpr()); c.height = Math.round(H * dpr()); }
       svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
       if (!cfg) { L = null; paintBoard(); svg.innerHTML = ""; return; }
-      const f = flags(), sp = cfg.spec, small = W < 560, r = small ? (f.ring ? 2.2 : 2.4) : 3, pad = small ? 14 : 22, x0 = pad, x1 = W - pad;
-      const gh = opts.gauge && show().gauge !== false ? 104 + (f.C ? 30 : 0) : 0, below = 38 + (f.S ? 44 : 0);
-      const floor = H - gh - (gh ? 8 : 0) - below, pinTop = 42;
-      let heapH = Math.max(70, 0.38 * H), pinBot = floor - heapH - 20;
-      if (pinBot - pinTop < 90) { heapH = Math.max(60, heapH - (90 - (pinBot - pinTop))); pinBot = floor - heapH - 20; }
+      const f = flags(), sp = cfg.spec, small = W < 560, pad = small ? 14 : 22, gauge = opts.gauge && show().gauge !== false;
+      // a wide board keeps the fall close to square and gives the rest of its width to the gauge
+      const wide = gauge && W >= 620 && W > 1.2 * H, colW = wide ? Math.round(clamp(W - 1.14 * H, 230, 0.42 * W)) : 0;
+      const x0 = pad, x1 = W - pad - colW, XR = x1 + pad;
+      const gh = gauge && !wide ? 104 + (f.C ? 30 : 0) : 0, below = 38 + (f.S ? 44 : 0);
+      const floor = H - gh - (gh ? 8 : 0) - below, pinTop = 44;
+      let heapH = Math.max(64, 0.43 * (floor - pinTop)), pinBot = floor - heapH - 20;
+      if (pinBot - pinTop < 90) { heapH = Math.max(56, heapH - (90 - (pinBot - pinTop))); pinBot = floor - heapH - 20; }
       const sc = S.scale || scaleFor(null), lo = Math.log(sc.lo), hi = Math.log(sc.hi), bx = (x1 - x0) / (hi - lo), ax = x0 + (Math.log(sp.S0) - lo) * bx;
-      const nb = Math.max(8, Math.floor((x1 - x0) / (2 * r))), m = S.cur?.m || (isFlat(sp.product) ? 64 : Math.min(64, sp.m));
+      // radius: 2,000 balls should just fit the heap without overlapping
+      const r = clamp(Math.sqrt((heapH * bx * sp.sigma * Math.sqrt(sp.T)) / 4300), small ? 1.9 : 2, 3.2);
+      const nb = Math.max(8, Math.floor((x1 - x0) / (2 * r))), m = S.cur?.m || (isFlat(sp.product) ? 64 : Math.min(64, sp.m)), pinH = pinBot - pinTop;
+      const nr = Math.max(1, Math.min(m, clamp(Math.round(pinH / (small ? 17 : 21)), 4, 20))), gap = pinH / nr, snap = isFlat(sp.product) || sp.product === "asian";
       const xP = (p) => x0 + (Math.log(p) - lo) * bx;
-      L = { gx0: x0 + Math.min(170, W * 0.38) + 14, W, H, small, r, x0, x1, floor, pinTop, pinBot, pinH: pinBot - pinTop, heapTop: pinBot + 20, heapH, nb, bw: (x1 - x0) / nb, ax, bx, lo, hi, m, xP, gy: H - 104 - 6, gh, below, f, xK: xP(sp.K), xS: xP(sp.S0), xH: sp.H ? xP(sp.H) : NaN };
+      L = { W, H, small, wide, gauge, r, x0, x1, XR, floor, pinTop, pinBot, pinH, nr, gap, dxp: clamp(gap * 1.08, 14, 28), snap, nb, bw: (x1 - x0) / nb, ax, bx, lo, hi, m, xP, gh, below, f, xK: xP(sp.K), xS: xP(sp.S0), xH: sp.H ? xP(sp.H) : NaN };
       L.heapTop = pinBot + 20; L.heapH = floor - L.heapTop;
+      // the gauge: a strip under the board, or a column beside it
+      if (wide) { L.lx = XR + 20; L.gx0 = L.lx; L.gx1 = W - pad; L.gy = 14; L.ay = L.gy + 142; L.yc = H - 52; L.ycLab = L.yc + 4; L.tapeY = L.ay + 38; L.tapeH = Math.max(40, (f.C ? L.yc - 22 : H - 22) - L.tapeY); }
+      else { L.lx = x0; L.gx0 = x0 + Math.min(170, W * 0.38) + 14; L.gx1 = x1; L.gy = H - 104 - 6; L.ay = L.gy + 70; L.yc = L.gy - 30; L.ycLab = L.yc + 12; }
       // trays sit in the top corner of the heap, away from the barrier
       const side = f.kind === 2 ? "left" : sp.H ? (sp.H < sp.S0 ? "right" : "left") : "right";
-      const tw = f.kind === 1 ? 70 : f.kind === 2 ? 88 : 100;
+      const tw = f.kind === 1 ? 78 : f.kind === 2 ? 96 : 108;
       L.tray = { w: tw, h: 40, x: side === "right" ? x1 - tw : x0, y: L.heapTop + 22, side };
       rebucket();
+      // balls in the air get new routes and heap spots
+      for (const ball of S.active) if (ball.phase === 0) { prepare(ball); ball.hitK = 1e9; if (ball.t) ball.t.k = -1; }
+      S.pitch = pitchFor(S.maxRes);
       build();
       S.dirty = true; S.gaugeDirty = true;
       kick();
     }
-    const yAt = (j) => L.pinTop + (L.pinH * j) / L.m;
+    const rowY = (k) => L.pinTop + L.gap * k;
+    const pegOff = (k) => (k % 2 ? 0 : 0.5);
+    const pegI = (k, x) => Math.round((x - L.ax) / L.dxp - pegOff(k));
+    const pegX = (k, i) => L.ax + (i + pegOff(k)) * L.dxp;
     const binOf = (xv) => clamp(Math.floor((xv - L.x0) / L.bw), 0, L.nb - 1);
     const inZone = (absV) => (cfg.spec.call ? absV > cfg.spec.K : absV < cfg.spec.K);
     const pitchFor = (mx) => (mx <= 1 ? 2 * L.r : Math.max(0.3, Math.min(2 * L.r, (L.floor - L.heapTop - 6 - 2 * L.r) / (mx - 1))));
@@ -201,7 +218,6 @@ const Board = (() => {
       const d = S.landed;
       for (let i = 0; i < d.ln.length; i++) { const b = binOf(L.ax + L.bx * d.ln[i]); d.bin[i] = b; d.slot[i] = S.binCount[b]++; S.reserved[b]++; }
       for (let b = 0; b < L.nb; b++) S.maxRes = Math.max(S.maxRes, S.reserved[b]);
-      S.pitch = pitchFor(S.maxRes);
     }
 
     // ------------------------------------------------------------ the static overlay
@@ -209,30 +225,30 @@ const Board = (() => {
       const sp = cfg.spec, f = L.f, b = S.cur, T = (x, y, s, o = {}) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${o.size || 12}" fill="${o.fill || MUTE}" text-anchor="${o.a || "start"}"${o.bold ? ' font-weight="700"' : ""} stroke="#fff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${esc(s)}</text>`;
       let s = "";
       // hopper
-      const hx = clamp(L.xS, 14, W - 14);
+      const hx = clamp(L.xS, 14, L.XR - 14);
       s += `<path d="M${hx - 7} 20 L${hx + 7} 20 L${hx} 34 Z" fill="${INK}"/>`;
-      const hl = `today ${fmtP(sp.S0)}`;
+      const hl = `S₀ = ${fmtP(sp.S0)}`;
       s += hx < 100 ? T(hx + 12, 31, hl, { fill: INK }) : T(hx - 11, 31, hl, { a: "end", fill: INK });
       // the heap floor and price ticks
       if (show().heap !== false) {
         s += `<line x1="${L.x0 - 6}" x2="${L.x1 + 6}" y1="${L.floor + 0.5}" y2="${L.floor + 0.5}" stroke="${INK}" stroke-width="1"/>`;
         const tk = ticks(Math.exp(L.lo), Math.exp(L.hi), Math.max(3, Math.round((L.x1 - L.x0) / 90))), dec = decimals(tk.step);
         for (const v of tk.vals) { const x = L.xP(v); if (x < L.x0 - 4 || x > L.x1 + 4) continue; s += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${L.floor + 1}" y2="${L.floor + 5}" stroke="${PIN}" stroke-width="1"/>` + `<text x="${x.toFixed(1)}" y="${L.floor + 19}" font-size="11.5" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`; }
-        s += `<text data-r="count" x="${L.x1}" y="${L.heapTop - 5}" font-size="13" font-weight="700" fill="${INK}" text-anchor="end" style="font-variant-numeric:tabular-nums" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">0 balls</text>`;
-        s += `<text x="${L.x1}" y="${L.floor + 34}" font-size="11" fill="${MUTE}" text-anchor="end">price on expiry day (log scale)</text>`;
+        s += `<text data-r="count" x="${L.x1}" y="${L.heapTop - 5}" font-size="13" font-weight="700" fill="${INK}" text-anchor="end" style="font-variant-numeric:tabular-nums" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">0 paths</text>`;
+        s += `<text x="${L.x1}" y="${L.floor + 34}" font-size="11" fill="${MUTE}" text-anchor="end"><tspan font-style="italic">S</tspan><tspan font-size="8.5" dy="3" font-style="italic">T</tspan><tspan dy="-3">, log scale</tspan></text>`;
         // strike and payoff zone label
         s += `<line x1="${L.xK.toFixed(1)}" x2="${L.xK.toFixed(1)}" y1="${L.heapTop}" y2="${L.floor}" stroke="${INK}" stroke-width="1.4"/>`;
-        s += T(L.xK + (sp.call ? -6 : 6), L.heapTop - 5, `strike ${fmtP(sp.K)}`, { a: sp.call ? "end" : "start", fill: INK, bold: true });
-        // "pays here" shares the row with the ball count at the right edge: keep it only where it fits
-        if (!sp.call || L.xK + 6 + 62 < L.x1 - 84) s += T(L.xK + (sp.call ? 6 : -6), L.heapTop - 5, "pays here", { a: sp.call ? "start" : "end", fill: MUTE });
-        if (sp.product === "asian") s += T(sp.call ? L.x0 : L.x1, L.heapTop + 15, "heaped by each path’s average", { a: sp.call ? "start" : "end", size: 11.5 });
+        s += T(L.xK + (sp.call ? -6 : 6), L.heapTop - 5, `K = ${fmtP(sp.K)}`, { a: sp.call ? "end" : "start", fill: INK, bold: true });
+        // the payoff label shares the row with the ball count at the right edge: keep it only where it fits
+        if (!sp.call || L.xK + 6 + 62 < L.x1 - 84) s += T(L.xK + (sp.call ? 6 : -6), L.heapTop - 5, "payoff > 0", { a: sp.call ? "start" : "end", fill: MUTE });
+        if (sp.product === "asian") s += T(sp.call ? L.x0 : L.x1, L.heapTop + 15, "heaped by path average", { a: sp.call ? "start" : "end", size: 11.5 });
       }
       // gadgets in the pin field
       if (f.A && b) { const mx = L.ax + L.bx * b.sorted[NP >> 1]; s += `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${L.pinTop}" y2="${L.pinBot}" stroke="${BLUE}" stroke-width="1" stroke-dasharray="5 4" opacity=".5"/>`; }
       if (sp.H) {
         s += `<line x1="${L.xH.toFixed(1)}" x2="${L.xH.toFixed(1)}" y1="${L.pinTop}" y2="${L.floor}" stroke="${RED}" stroke-width="2.5"/>`;
         const away = sp.H < sp.S0;
-        s += T(L.xH + (away ? 7 : -7), L.pinTop + 12, `barrier ${fmtP(sp.H)}`, { a: away ? "start" : "end", fill: RED, bold: true });
+        s += T(L.xH + (away ? 7 : -7), L.pinTop + 12, `H = ${fmtP(sp.H)}`, { a: away ? "start" : "end", fill: RED, bold: true });
       }
       if (sp.product === "american" && b?.pol) {
         const pol = b.pol, nPol = pol.length / 4, pts = [], xmin = Math.max(0.4, Math.exp(L.lo) / sp.K);
@@ -243,7 +259,7 @@ const Board = (() => {
           if (!found) { pts.push(null); continue; }
           let a = hi, c = hi + 0.004;
           for (let it = 0; it < 30; it++) { const mid = (a + c) / 2; if (g(mid) > 0) a = mid; else c = mid; }
-          pts.push([L.xP(sp.K * (a + c) / 2), yAt(j)]);
+          pts.push([L.xP(sp.K * (a + c) / 2), L.pinTop + (L.pinH * j) / L.m]);
         }
         const good = pts.filter(Boolean);
         if (good.length > 1) {
@@ -261,39 +277,39 @@ const Board = (() => {
       // lanes
       if (f.S && b) {
         for (let h = 1; h < 32; h++) { const x = L.ax + L.bx * b.sorted[Math.floor((NP * h) / 32)]; s += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${L.floor - 7}" y2="${L.floor + 1}" stroke="${GREEN}" stroke-width="1.5"/>`; }
-        s += `<g data-r="lanes"></g><text x="${L.x0}" y="${L.floor + 66}" font-size="11.5" fill="${GREEN_D}">32 lanes, equally likely</text>`;
+        s += `<g data-r="lanes"></g><text x="${L.x0}" y="${L.floor + 66}" font-size="11.5" fill="${GREEN_D}">32 strata of equal probability</text>`;
       }
-      if (f.ring) s += `<path data-r="curve" fill="none" stroke="${VIOLET}" stroke-width="1.6"/><text data-r="curveLabel" font-size="11.5" fill="${VIOLET}" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text>`;
+      if (isFlat(sp.product) && show().heap !== false) s += `<path data-r="curve" fill="none" stroke="${f.ring ? VIOLET : MUTE}" stroke-width="${f.ring ? 1.8 : 1.3}"${f.ring ? "" : ' stroke-dasharray="5 4"'}/><text data-r="curveLabel" font-size="11.5" fill="${f.ring ? VIOLET : MUTE}" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text>`;
       // moving parts
-      s += `<g data-r="routes"></g><g data-r="trails"></g><g data-r="notch"></g><g data-r="chips"></g>`;
-      if (L.gh) s += gaugeSvg(T);
+      s += `<g data-r="trails"></g><g data-r="notch"></g><g data-r="chips"></g>`;
+      if (L.gauge) s += gaugeSvg();
       svg.innerHTML = s;
       R = {};
       svg.querySelectorAll("[data-r]").forEach((e) => { R[e.dataset.r] = e; });
       R.trailEls = [];
       for (const t of S.trails) mountTrail(t);
-      R.routeEls = {};
-      for (const k in S.routes) setRoute(k);
       for (const c of S.chips) R.chips.appendChild(c);
       updateDynamic(true);
     }
 
-    function gaugeSvg(T) {
-      const y0 = L.gy, f = L.f, x0 = L.x0, x1 = L.x1, yc = y0 - (f.C ? 30 : 0), g0 = L.gx0, ay = y0 + 70;
+    function gaugeSvg() {
+      const y0 = L.gy, f = L.f, lx = L.lx, x1 = L.gx1, yc = L.yc, g0 = L.gx0, ay = L.ay;
       let s = "";
-      if (f.C) s += `<text x="${x0}" y="${yc + 12}" font-size="11.5" fill="${MUTE}">stock, average so far</text><line x1="${g0}" x2="${x1}" y1="${yc + 20}" y2="${yc + 20}" stroke="${RULE}"/><g data-r="stockTicks"></g><line data-r="stockKnown" y1="${yc + 12}" y2="${yc + 28}" stroke="${INK}" stroke-width="1.6"/><g data-r="stockNeedle" opacity="0"><line y1="${yc + 11}" y2="${yc + 29}" stroke="${ORANGE}" stroke-width="2.4"/></g>`;
-      s += `<text data-r="gLabel" x="${x0}" y="${y0 + 16}" font-size="12" fill="${MUTE}">Average payoff so far</text>`;
-      s += `<text data-r="value" x="${x0}" y="${y0 + 46}" font-size="28" font-weight="700" fill="${INK}" style="font-variant-numeric:tabular-nums">\u2013</text>`;
-      s += `<text data-r="gNote" x="${x0}" y="${y0 + 59}" font-size="11" fill="${MUTE}"></text>`;
-      s += `<rect x="${x0}" y="${y0 + 66}" width="10" height="10" fill="${YELLOW}"/><text data-r="exactLabel" x="${x0 + 16}" y="${y0 + 75.5}" font-size="12.5" fill="${INK}"></text>`;
+      if (L.wide) s += `<line x1="${L.XR + 0.5}" x2="${L.XR + 0.5}" y1="0" y2="${H}" stroke="${RULE}"/>`;
+      if (f.C) s += `<text x="${lx}" y="${L.ycLab}" font-size="11.5" fill="${MUTE}">mean of control C</text><line x1="${g0}" x2="${x1}" y1="${yc + 20}" y2="${yc + 20}" stroke="${RULE}"/><g data-r="stockTicks"></g><line data-r="stockKnown" y1="${yc + 12}" y2="${yc + 28}" stroke="${INK}" stroke-width="1.6"/><g data-r="stockNeedle" opacity="0"><line y1="${yc + 11}" y2="${yc + 29}" stroke="${ORANGE}" stroke-width="2.4"/></g>`;
+      s += `<text data-r="gLabel" x="${lx}" y="${y0 + 16}" font-size="12" fill="${MUTE}"></text>`;
+      s += `<text data-r="value" x="${lx}" y="${y0 + 46}" font-size="28" font-weight="700" fill="${INK}" style="font-variant-numeric:tabular-nums">\u2013</text>`;
+      s += `<text data-r="gNote" x="${lx}" y="${y0 + 59}" font-size="11" fill="${MUTE}"></text>`;
+      s += `<rect x="${lx}" y="${y0 + 66}" width="10" height="10" fill="${YELLOW}"/><text data-r="exactLabel" x="${lx + 16}" y="${y0 + 75.5}" font-size="12.5" fill="${INK}"></text>`;
       s += `<line x1="${g0}" x2="${x1}" y1="${ay + 0.5}" y2="${ay + 0.5}" stroke="${RULE}" stroke-width="1"/><g data-r="axisTicks"></g>`;
       s += `<rect data-r="band" x="${(g0 + x1) / 2 - 4}" y="${ay - 30}" width="8" height="30" fill="${YELLOW}"/>`;
       s += `<g data-r="ghosts"></g>`;
       for (const k of ["off", "offCmp"]) s += `<g data-r="${k}" opacity="0"><line stroke="${k === "off" ? INK : GHOST}" stroke-width="1" stroke-dasharray="3 3"/><path fill="${k === "off" ? INK : GHOST}"/><text font-size="11.5" font-weight="700" fill="${k === "off" ? INK : GHOST}" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text></g>`;
-      if (f.C) s += `<g data-r="arrow" opacity="0"><line stroke="${ORANGE}" stroke-width="2"/><path fill="${ORANGE}"/><text font-size="11" fill="${ORANGE_D}" text-anchor="middle" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">\u2212 \u03b2 \u00d7 error</text></g>`;
       s += `<g data-r="cmp" opacity="0"><line y1="${ay - 26}" y2="${ay}" stroke="${GHOST}" stroke-width="2"/><path d="M-4 ${ay - 34} L4 ${ay - 34} L0 ${ay - 27} Z" fill="${GHOST}"/><text data-r="cmpLabel" x="-8" y="${ay - 27}" font-size="11.5" font-weight="700" fill="${GHOST}" text-anchor="end" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">plain</text></g>`;
       s += `<g data-r="needle" opacity="0"><line y1="${ay - 34}" y2="${ay}" stroke="${INK}" stroke-width="2"/><path d="M-4 ${ay - 42} L4 ${ay - 42} L0 ${ay - 34} Z" fill="${INK}"/></g>`;
       s += `<text data-r="needleLabel" y="${ay - 35}" font-size="11.5" font-weight="700" fill="${INK}" text-anchor="start" opacity="0" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text>`;
+      if (f.C) s += `<g data-r="arrow" opacity="0"><line stroke="${ORANGE}" stroke-width="2"/><path fill="${ORANGE}"/><text font-size="11" fill="${ORANGE_D}" text-anchor="middle" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">\u2212\u03b2(C\u0304 \u2212 E[C])</text></g>`;
+      if (L.wide) s += `<svg x="${g0}" y="${L.tapeY}" width="${x1 - g0}" height="${L.tapeH}" overflow="hidden"><rect width="100%" height="100%" fill="#fafbfc"/><path data-r="tBand" fill="${INK}" fill-opacity=".07"/><line data-r="tExact" y1="0" y2="${L.tapeH}" stroke="${YELLOW}" stroke-width="3"/><path data-r="tPlain" fill="none" stroke="${GHOST}" stroke-width="1.1" stroke-dasharray="3 3"/><path data-r="tMine" fill="none" stroke="${INK}" stroke-width="1.1" stroke-dasharray="3 3"/><path data-r="tCmp" fill="none" stroke="${GHOST}" stroke-width="1.3" stroke-linejoin="round"/><path data-r="tRun" fill="none" stroke="${INK}" stroke-width="1.7" stroke-linejoin="round"/><circle data-r="tDot" r="4" fill="${INK}" opacity="0"/><g data-r="tTicks"></g></svg>`;
       return s;
     }
 
@@ -304,12 +320,14 @@ const Board = (() => {
       bctx.clearRect(0, 0, back.width, back.height);
       if (!L || !cfg) return;
       const sh = show(), sp = cfg.spec;
-      if (sh.heap !== false) { bctx.fillStyle = "rgba(20,23,26,.045)"; const ty = L.heapTop - 17; if (sp.call) bctx.fillRect(L.xK, ty, W - L.xK, L.floor - ty); else bctx.fillRect(0, ty, L.xK, L.floor - ty); }
-      if (sh.pins !== false) {
-        const rows = Math.min(L.m, 18), step = Math.ceil(L.m / rows), p = new Path2D();
-        for (let j = step, row = 0; j <= L.m; j += step, row++) { const y = yAt(j), off = row % 2 ? 6.5 : 0; for (let x = L.x0 + off; x <= L.x1; x += 13) { p.moveTo(x + 2.0, y); p.arc(x, y, 2.0, 0, 6.2832); } }
-        bctx.fillStyle = PIN; bctx.fill(p);
+      if (sh.heap !== false) { bctx.fillStyle = "rgba(20,23,26,.045)"; const ty = L.heapTop - 17; if (sp.call) bctx.fillRect(L.xK, ty, L.XR - L.xK, L.floor - ty); else bctx.fillRect(0, ty, L.xK, L.floor - ty); }
+      if (sh.pins !== false && !L.snap) { // paths drawn exactly get date lines instead of pins
+        const p = new Path2D();
+        for (let k = 1; k <= L.nr; k++) { const y = Math.round(rowY(k)) + 0.5; p.moveTo(L.x0, y); p.lineTo(L.x1, y); }
+        bctx.strokeStyle = "#e9ecef"; bctx.lineWidth = 1; bctx.stroke(p);
       }
+      if (gl) return; // pins and heap are drawn with the balls
+      if (sh.pins !== false && L.snap) { const p = new Path2D(); eachPeg((x, y) => { p.moveTo(x + 2.2, y); p.arc(x, y, 2.2, 0, 6.2832); }); bctx.fillStyle = PIN; bctx.fill(p); }
       if (sh.heap === false) return;
       const d = S.landed, f = L.f, groups = new Map(), asianTicks = sp.product === "asian" ? new Path2D() : null;
       for (let i = 0; i < d.ln.length; i++) {
@@ -320,11 +338,38 @@ const Board = (() => {
         if (asianTicks) { const ax = L.ax + L.bx * d.avg[i]; asianTicks.moveTo(ax + 1.8, L.floor + 6); asianTicks.arc(ax, L.floor + 6, 1.8, 0, 6.2832); }
       }
       for (const [kk, g] of groups) {
-        const cls = (kk >> 4) & 1, a = (kk & 15) / 8, col = cls ? (f.ring ? VIOLET : INK) : f.ring ? VIOLET : PALE;
-        if (f.ring) { bctx.globalAlpha = cls ? 1 : 0.4; bctx.strokeStyle = col; bctx.lineWidth = L.small ? 1 : 1.2; bctx.stroke(g); } else { bctx.globalAlpha = a; bctx.fillStyle = col; bctx.fill(g); if (kk & 32) { bctx.globalAlpha = 1; bctx.strokeStyle = BLUE; bctx.lineWidth = 1; bctx.stroke(g); } }
+        const cls = (kk >> 4) & 1, a = (kk & 15) / 8, twin = kk & 32, col = f.ring ? VIOLET : twin ? (cls ? BLUE : SKY) : cls ? INK : PALE;
+        if (f.ring) { bctx.globalAlpha = cls ? 1 : 0.4; bctx.strokeStyle = col; bctx.lineWidth = L.small ? 1 : 1.2; bctx.stroke(g); } else { bctx.globalAlpha = a; bctx.fillStyle = col; bctx.fill(g); }
       }
       bctx.globalAlpha = 1;
       if (asianTicks) { bctx.strokeStyle = "rgba(20,23,26,.35)"; bctx.lineWidth = 1; bctx.stroke(asianTicks); }
+    }
+
+    function eachPeg(fn) {
+      for (let k = 1; k <= L.nr; k++) { const y = rowY(k); for (let i = Math.ceil((L.x0 - L.ax) / L.dxp - pegOff(k)); ; i++) { const x = pegX(k, i); if (x > L.x1) break; fn(x, y, k, i); } }
+    }
+    function put(n, x, y, rad, c, a, ring) {
+      if (buf.length < (n + 1) * 8) { const bigger = new Float32Array(buf.length * 2); bigger.set(buf); buf = bigger; }
+      const o = n * 8;
+      buf[o] = x; buf[o + 1] = y; buf[o + 2] = rad * 2 + 1.5; buf[o + 3] = c[0]; buf[o + 4] = c[1]; buf[o + 5] = c[2]; buf[o + 6] = a; buf[o + 7] = ring;
+      return n + 1;
+    }
+    const mixc = [0, 0, 0];
+    function scenery(n) { // pins (darker where more paths have passed) and the heap
+      const sh = show(), d = S.landed, f = L.f, tick = cfg.spec.product === "asian";
+      if (sh.pins !== false && L.snap) eachPeg((x, y, k, i) => {
+        const h = S.hits.get(k * 1000 + i), t = h ? 0.1 + 0.9 * Math.sqrt(h[0] / Math.max(40, S.maxHit)) : 0, glow = h ? Math.max(0, 1 - (S.clock - h[1]) / 260) : 0;
+        for (let c = 0; c < 3; c++) mixc[c] = C.pin[c] + (C.pinHot[c] - C.pin[c]) * Math.max(t, glow);
+        if (glow > 0) S.glow = true;
+        n = put(n, x, y, 2.2 + glow, mixc, 1, 0);
+      });
+      if (sh.heap === false) return n;
+      for (let i = 0; i < d.ln.length; i++) {
+        const cls = d.cls[i], col = f.ring ? C.violet : d.twin[i] ? (cls ? C.blue : C.sky) : cls ? C.ink : C.pale;
+        n = put(n, L.x0 + (d.bin[i] + 0.5) * L.bw, slotY(d.slot[i]), L.r, col, f.ring ? (cls ? 1 : 0.4) : d.alpha[i], f.ring ? 1 : 0);
+        if (tick) n = put(n, L.ax + L.bx * d.avg[i], L.floor + 6, 1.6, C.ghost, 0.5, 0);
+      }
+      return n;
     }
 
     function paintFront(n) {
@@ -349,43 +394,71 @@ const Board = (() => {
     }
 
     // ------------------------------------------------------------ balls
-    const ROUTE = { i05: [INK, 0.05, 1], b25: [BLUE, 0.25, 1.4], i12: [INK, 0.12, 1], b12: [BLUE, 0.12, 1] };
-    function setRoute(k) {
-      let e = R.routeEls[k];
-      if (!e) { const [c, o, w] = ROUTE[k]; e = R.routeEls[k] = el("path", { fill: "none", stroke: c, "stroke-opacity": o, "stroke-width": w, "stroke-linejoin": "round" }); R.routes.appendChild(e); }
-      e.setAttribute("d", S.routes[k]);
-    }
-    function addRoute(k, ball) { // the route down to the last pin row (or to where the ball stopped)
-      const p = polyline(ball.b, ball).pts, end = ball.fate === 0 ? p.length - 2 : p.length;
-      let d = "";
-      for (let j = 2; j < end; j += 2) d += (j > 2 ? "L" : "M") + p[j].toFixed(1) + " " + p[j + 1].toFixed(1);
-      S.routes[k] = (S.routes[k] || "") + d; setRoute(k);
-    }
     function mountTrail(t) {
       t.el = el("path", { fill: "none", stroke: t.color, "stroke-width": t.w || 1.2, "stroke-opacity": t.op || 1, "stroke-linejoin": "round", "stroke-linecap": "round" });
       if (t.d) t.el.setAttribute("d", t.d);
       R.trails.appendChild(t.el);
-      if (t.jumps?.length) { t.notchEl = el("path", { fill: "none", stroke: VIOLET, "stroke-width": "2.2" }); R.notch.appendChild(t.notchEl); }
+      t.notchEl = el("path", { fill: "none", stroke: VIOLET, "stroke-width": "2.2" }); R.notch.appendChild(t.notchEl);
     }
-    function polyline(b, ball) { // the ball's route in pixels: dates, then the fall into the heap
-      const { X, m } = b, o = ball.i * (m + 1), pts = [L.ax, 34], gs = ball.gStop;
-      const jumps = [];
-      pts.push(L.ax, L.pinTop);
-      for (let j = 1; j <= m; j++) {
-        if (j / m > gs + 1e-9) { const f = gs * m - (j - 1), ln = X[o + j - 1] + (X[o + j] - X[o + j - 1]) * f; pts.push(L.ax + L.bx * ln, L.pinTop + L.pinH * gs); break; }
-        pts.push(L.ax + L.bx * X[o + j], yAt(j));
-        if (b.jumps && b.jumps[ball.i * m + j - 1]) jumps.push(pts.length - 2);
+    function route(ball) { // way points in pixels: the hopper, then one per row of dates, or the point where the ball stops
+      const b = ball.b, { X, m } = b, o = ball.i * (m + 1), p = [L.ax, 34], gs = ball.gStop, lift = ball.r0 + 2.2, mx = L.XR - 3;
+      ball.jumps = [];
+      let from = 0;
+      for (let k = 1; k <= L.nr; k++) {
+        const j = Math.round((k * m) / L.nr);
+        if (j / m > gs + 1e-9) { p.push(clamp(L.ax + L.bx * b.stopLn[ball.i], 3, mx), L.pinTop + L.pinH * gs); break; }
+        let x = L.ax + L.bx * X[o + j];
+        if (L.snap) x = pegX(k, pegI(k, x));
+        p.push(clamp(x, 3, mx), rowY(k) - (L.snap ? lift : 0));
+        if (b.jumps) for (let q = from; q < j; q++) if (b.jumps[ball.i * m + q]) { ball.jumps.push(k); break; }
+        from = j;
       }
-      if (ball.fate === 0) pts.push(ball.xBin, ball.yLand);
-      for (let k = 0; k < pts.length; k += 2) pts[k] = clamp(pts[k], 2, W - 2);
-      return { pts, jumps };
+      ball.p = p; ball.ns = p.length / 2 - 1;
+    }
+    const hop = (dx, h) => h * (0.75 + 0.7 * Math.min(1, Math.abs(dx) / L.dxp)); // upward speed off a pin, in row heights per row time
+    function seg(ball, k) { // [x0, y0, x1, y1, v, duration] of the k-th hop; k = ns is the fall into the heap
+      const p = ball.p, D = ball.D, x = p[2 * k], y = p[2 * k + 1];
+      if (k < ball.ns) { const X1 = p[2 * k + 2], Y1 = p[2 * k + 3]; return [x, y, X1, Y1, k ? hop(X1 - x, Math.max(4, Y1 - y)) : 0, D]; }
+      const Y1 = slotY(ball.slot), h = Math.max(2, Y1 - y), v = 0.6 * L.gap;
+      return [x, y, ball.xBin, Y1, v, D * Math.max(0.7, Math.sqrt((h + v) / (2 * L.gap)))];
+    }
+    function place(ball, t) { // where the ball is t ms after release: 0 moving, 1 at rest, 2 stopped on the way
+      if (t < 0) t = 0;
+      let k = Math.floor(t / ball.D), u;
+      ball.rad = ball.r0;
+      if (k < ball.ns) u = t / ball.D - k;
+      else if (ball.fate) { const p = ball.p; ball.x = p[p.length - 2]; ball.y = p[p.length - 1]; return 2; }
+      else k = ball.ns;
+      const [x, y, X1, Y1, v, T] = seg(ball, k), h = Y1 - y;
+      if (k === ball.ns) {
+        const tf = t - k * ball.D;
+        u = tf / T;
+        if (u >= 1) { // two small damped bounces
+          const a = clamp(h * 0.04, 2, 9), b1 = 0.95 * ball.D, b2 = 0.55 * ball.D;
+          let q = (tf - T) / b1, A = a;
+          if (q >= 1) { q = (tf - T - b1) / b2; A = a * 0.28; }
+          ball.x = X1; ball.y = Y1 - (q < 1 ? A * 4 * q * (1 - q) : 0); ball.rad = L.r;
+          return q >= 1 ? 1 : 0;
+        }
+        ball.rad = ball.r0 + (L.r - ball.r0) * u * u;
+      }
+      ball.x = x + (X1 - x) * u; ball.y = y - v * u + (h + v) * u * u;
+      return 0;
     }
     function drawTrail(t, ball) {
-      const p = t.pts, upTo = ball.phase === 0 ? ball.y : 1e9, out = [];
-      for (let i = 0; i < p.length; i += 2) { if (p[i + 1] > upTo && i > 0) break; out.push((i ? "L" : "M") + p[i].toFixed(1) + " " + p[i + 1].toFixed(1)); }
-      if (ball.phase === 0) out.push("L" + ball.x.toFixed(1) + " " + ball.y.toFixed(1));
-      t.d = out.join(""); t.el.setAttribute("d", t.d);
-      if (t.notchEl) t.notchEl.setAttribute("d", t.jumps.filter((k) => p[k + 1] <= upTo).map((k) => `M${(p[k] - 4.5).toFixed(1)} ${p[k + 1].toFixed(1)}L${(p[k] + 4.5).toFixed(1)} ${p[k + 1].toFixed(1)}`).join(""));
+      const age = S.clock - ball.t0, kNow = ball.phase === 1 ? ball.ns : Math.min(ball.fate ? ball.ns : ball.ns + 1, Math.floor(age / ball.D));
+      if (t.k !== kNow) { // finished hops are parabolas, so quadratic curves
+        t.k = kNow; t.base = `M${ball.p[0].toFixed(1)} ${ball.p[1].toFixed(1)}`;
+        for (let k = 0; k < Math.min(kNow, ball.ns); k++) { const [x, y, X1, Y1, v] = seg(ball, k); t.base += `Q${((x + X1) / 2).toFixed(1)} ${(y - v / 2).toFixed(1)} ${X1.toFixed(1)} ${Y1.toFixed(1)}`; }
+      }
+      let d = t.base;
+      const k = Math.min(kNow, ball.ns);
+      if (ball.phase !== 1 && !(ball.fate && k >= ball.ns)) {
+        const [x, y, X1, Y1, v, T] = seg(ball, k), u = Math.min(1, (age - k * ball.D) / T);
+        d += u < 1 ? `Q${(x + ((X1 - x) / 2) * u).toFixed(1)} ${(y - (v / 2) * u).toFixed(1)} ${ball.x.toFixed(1)} ${ball.y.toFixed(1)}` : `Q${((x + X1) / 2).toFixed(1)} ${(y - v / 2).toFixed(1)} ${X1.toFixed(1)} ${Y1.toFixed(1)}`;
+      }
+      t.d = d; t.el.setAttribute("d", d);
+      if (ball.jumps.length) t.notchEl.setAttribute("d", ball.jumps.filter((q) => q <= kNow).map((q) => `M${(ball.p[2 * q] - 5).toFixed(1)} ${ball.p[2 * q + 1].toFixed(1)}h10`).join(""));
     }
     function bounds(ball) { // the heap spot of a ball (also used for reduced motion)
       const b = ball.b, i = ball.i, hv = b.heap[i], xv = L.ax + L.bx * hv;
@@ -398,49 +471,35 @@ const Board = (() => {
       const absV = sp.S0 * Math.exp(b.heap[i]);
       ball.cls = inZone(absV) ? 1 : 0;
       ball.ring = L.f.ring ? 1 : 0;
-      ball.col = ball.blue ? C.blue : ball.cls || ball.one ? C.ink : C.pale;
-      if (ball.fate === 0) { bounds(ball); ball.slot = S.reserved[ball.bin]++; S.maxRes = Math.max(S.maxRes, ball.slot + 1); ball.yLand = slotY(ball.slot); }
-      else ball.yLand = L.floor - L.r;
-      ball.r0 = ball.one ? 5 : L.r;
+      ball.col = ball.twin ? (ball.cls || ball.one ? C.blue : C.sky) : ball.cls || ball.one ? C.ink : C.pale;
+      if (ball.fate === 0) { bounds(ball); ball.slot = S.reserved[ball.bin]++; S.maxRes = Math.max(S.maxRes, ball.slot + 1); }
+      ball.r0 = ball.one ? (L.small ? 4.5 : 6) : Math.max(L.r, L.small ? 2.4 : 3.1);
+      ball.D = ((ball.one ? 2300 : 1500) / Math.max(6, L.nr)) * (1 + (ball.one ? 0 : 0.22 * (((ball.i + 1) * 2654435761 % 4294967296) / 4294967296 - 0.5)));
+      route(ball);
     }
     function activate(ball) {
       prepare(ball);
-      if (S.pitch !== pitchFor(S.maxRes)) { S.pitch = pitchFor(S.maxRes); S.dirty = true; }
-      if (ball.fate === 0) ball.yLand = slotY(ball.slot);
-      const yStopFall = ball.fate === 0 ? ball.yLand : L.pinTop + L.pinH * ball.gStop, span = Math.max(1, (ball.fate ? L.floor - L.r : ball.yLand) - 34);
-      ball.stopU = ball.fate === 0 ? 1 : clamp(((yStopFall - 34) / span) ** (1 / 1.35), 0.02, 1);
-      ball.span = span; ball.phase = 0; ball.dur = ball.dur0;
-      if (ball.trail) { const t = ball.trail; const r = polyline(ball.b, ball); t.pts = r.pts; t.jumps = r.jumps; ball.t = t; S.trails.push(t); mountTrail(t); }
-      else if (ball.faint) addRoute(ball.pair ? "b25" : "i05", ball);
+      ball.phase = 0; ball.hitK = 0;
+      if (ball.trail) { ball.t = ball.trail; ball.t.k = -1; S.trails.push(ball.t); mountTrail(ball.t); }
       S.active.push(ball);
     }
-    function place(ball, u) { // position of a falling ball at time fraction u
-      const b = ball.b, m = L.m, y = 34 + ball.span * Math.pow(u, 1.35), g = clamp((y - L.pinTop) / L.pinH, 0, 1), f = Math.min(g, ball.gStop) * m, j = Math.min(m - 1, Math.floor(f)), fr = f - j, o = ball.i * (m + 1);
-      const ln = b.X[o + j] + (b.X[o + j + 1] - b.X[o + j]) * fr;
-      let x = L.ax + L.bx * ln;
-      if (ball.fate === 0 && y > L.pinBot) {
-        const s = clamp((y - L.pinBot) / Math.max(1, ball.yLand - L.pinBot), 0, 1), xe = L.ax + L.bx * b.end[ball.i];
-        x = xe + (ball.xBin - xe) * s; ball.rad = ball.r0 + (L.r - ball.r0) * s;
-      } else ball.rad = ball.r0;
-      ball.x = Math.max(2, Math.min(W - 2, x)); ball.y = y;
+    function strike(ball, k) { // the ball reached the pin in row k
+      if (!L.snap || k < 1 || k > L.nr) return;
+      const key = k * 1000 + pegI(k, ball.p[2 * k]), h = S.hits.get(key);
+      if (h) { h[0]++; h[1] = S.clock; } else S.hits.set(key, [1, S.clock]);
+      S.maxHit = Math.max(S.maxHit, h ? h[0] : 1);
     }
     function step(ball) { // returns false when the ball is done
-      const t = S.clock - ball.t0;
       if (ball.phase === 0) {
-        const u = Math.min(1, t / ball.dur0);
-        if (u < ball.stopU) { place(ball, u); return true; }
-        place(ball, ball.stopU);
-        if (ball.fate === 0) { ball.phase = 2; ball.ts = S.clock; ball.x = ball.xBin; ball.y = ball.yLand; } else { ball.phase = 1; ball.ts = S.clock; ball.sx = ball.x; ball.sy = ball.y; ball.red = ball.fate === 1; }
-      }
-      if (ball.phase === 1) {
-        const q = Math.min(1, (S.clock - ball.ts) / 480), e = 1 - (1 - q) ** 3, tr = L.tray, tx = tr.x + tr.w / 2, ty = tr.y + 6;
-        ball.x = ball.sx + (tx - ball.sx) * e; ball.y = ball.sy + (ty - ball.sy) * e;
-        if (ball.fate === 1) ball.col = C.red;
-        if (q >= 1) { commit(ball); return false; }
+        const t = S.clock - ball.t0, at = place(ball, t), k = Math.min(ball.ns, Math.floor(t / ball.D));
+        while (ball.hitK < k) strike(ball, ++ball.hitK);
+        if (at === 1) { if (ball.t) drawTrail(ball.t, ball); commit(ball); return false; }
+        if (at === 2) { ball.phase = 1; ball.ts = S.clock; ball.sx = ball.x; ball.sy = ball.y; if (ball.t) drawTrail(ball.t, ball); }
         return true;
       }
-      const q = Math.min(1, (S.clock - ball.ts) / 100);
-      ball.x = ball.xBin; ball.y = slotY(ball.slot) - 2 * Math.sin(Math.PI * q); ball.rad = L.r;
+      const q = Math.min(1, (S.clock - ball.ts) / 480), e = 1 - (1 - q) ** 3, tr = L.tray, tx = tr.x + tr.w / 2, ty = tr.y + 6;
+      ball.x = ball.sx + (tx - ball.sx) * e; ball.y = ball.sy + (ty - ball.sy) * e;
+      if (ball.fate === 1) ball.col = C.red;
       if (q >= 1) { commit(ball); return false; }
       return true;
     }
@@ -457,7 +516,7 @@ const Board = (() => {
         while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (e >= b.sorted[Math.floor((NP * mid) / 32)]) lo = mid; else hi = mid - 1; }
         S.lanes[lo]++;
       } else S.trays[L.f.kind]++;
-      if (ball.keep) addRoute(ball.pair ? "b12" : "i12", ball);
+      S.hist.push(S.sums.pay / S.count);
       S.dirty = true; S.gaugeDirty = true; ariaDirty = true;
       S.last = { count: S.count, ST: sp.S0 * Math.exp(b.end[i]), payoff: ball.pay };
       S.landedFrame = true;
@@ -466,11 +525,11 @@ const Board = (() => {
         let cx, cy, anchor = "middle";
         if (ball.fate) { const left = tr.side === "left"; cx = left ? tr.x + tr.w + 8 : tr.x - 8; cy = tr.y + 24; anchor = left ? "start" : "end"; }
         else {
-          const top = slotY(ball.slot) - L.r; cx = clamp(ball.xBin, 44, W - 44); cy = top - 9;
-          if (cy < L.heapTop + 12) { const right = ball.bin < L.nb / 2; cx = clamp(ball.xBin + (right ? 12 : -12), 10, W - 10); cy = L.heapTop + 16; anchor = right ? "start" : "end"; }
+          const top = slotY(ball.slot) - L.r; cx = clamp(ball.xBin, 48, L.XR - 48); cy = top - 9;
+          if (cy < L.heapTop + 12) { const right = ball.bin < L.nb / 2; cx = clamp(ball.xBin + (right ? 12 : -12), 10, L.XR - 10); cy = L.heapTop + 16; anchor = right ? "start" : "end"; }
         }
         const txt = el("text", { x: cx, y: cy, "font-size": "12", "font-weight": "700", fill: INK, "text-anchor": anchor, stroke: "#fff", "stroke-width": "3", "paint-order": "stroke", "stroke-linejoin": "round" });
-        txt.style.transition = "opacity .5s"; txt.textContent = "pays " + (ball.pay > 0 ? ball.pay.toFixed(2) : "0");
+        txt.style.transition = "opacity .5s"; txt.textContent = "payoff " + (ball.pay > 0 ? ball.pay.toFixed(2) : "0");
         R.chips.appendChild(txt); S.chips.push(txt);
         setTimeout(() => { txt.style.opacity = "0"; }, 2000);
         setTimeout(() => { txt.remove(); S.chips = S.chips.filter((c) => c !== txt); }, 2600);
@@ -511,29 +570,30 @@ const Board = (() => {
     const sdOf = (s, s2, n) => (n > 1 ? Math.sqrt(Math.max(0, (s2 - (s * s) / n) / (n - 1))) : NaN);
     function gaugeTarget() {
       const exact = cfg.exact, lastSe = trace?.length ? trace[trace.length - 1][2] : NaN, plainSe = sdOf(S.sums.pay, S.sums.pay2, S.count) / Math.sqrt(S.count);
-      if (cfg.gaugeRange) return { center: (cfg.gaugeRange[0] + cfg.gaugeRange[1]) / 2, half: (cfg.gaugeRange[1] - cfg.gaugeRange[0]) / 2, fixed: true };
+      if (cfg.gaugeRange) return { center: (cfg.gaugeRange[0] + cfg.gaugeRange[1]) / 2, half: ((cfg.gaugeRange[1] - cfg.gaugeRange[0]) / 2) * (L.wide ? 1.4 : 1), fixed: true };
       const center = Number.isFinite(exact) ? exact : Number.isFinite(meanPay()) ? meanPay() : 1;
       let half = Math.max(Number.isFinite(plainSe) ? 3.5 * plainSe : 0, Number.isFinite(lastSe) ? 4 * lastSe : 0);
       if (!(half > 0)) half = Math.max(Math.abs(center) * 0.35, 0.05);
       return { center, half };
     }
     function updateGauge(dt, force) {
-      if (!L?.gh || !R.needle) return;
-      const sp = cfg.spec, { center, half, fixed } = gaugeTarget(), gx0 = L.gx0, gx1 = L.x1, y0 = L.gy, ay = y0 + 70;
+      if (!L?.gauge || !R.needle) return;
+      const sp = cfg.spec, { center, half, fixed } = gaugeTarget(), gx0 = L.gx0, gx1 = L.gx1, ay = L.ay;
       if (!Number.isFinite(G.range) || force && !S.count || fixed) G.range = half;
       else if (fixed) G.range = half;
       else G.range += (half - G.range) * (1 - Math.exp(-dt / 140));
       const rng = G.range, px = (v) => clamp(gx0 + ((v - (center - rng)) / (2 * rng)) * (gx1 - gx0), gx0 + 3, gx1 - 3);
+      px.raw = (v) => gx0 + ((v - (center - rng)) / (2 * rng)) * (gx1 - gx0);
       // ticks
       const tk = ticks(center - rng, center + rng, 4), dec = decimals(tk.step);
       const sig = tk.vals.map((v) => v.toFixed(dec)).join("|");
       if (sig !== G.sig || !R.axisTicks.firstChild) { G.sig = sig; R.axisTicks.innerHTML = tk.vals.map((v) => `<line x1="${px(v).toFixed(1)}" x2="${px(v).toFixed(1)}" y1="${ay + 1}" y2="${ay + 6}" stroke="${RULE}"/><text x="${px(v).toFixed(1)}" y="${ay + 27}" font-size="11.5" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`).join(""); }
-      R.exactLabel.innerHTML = Number.isFinite(cfg.exact) ? `true price <tspan font-weight="700">${cfg.exact.toFixed(2)}</tspan>` : "true price";
+      R.exactLabel.innerHTML = Number.isFinite(cfg.exact) ? `exact price <tspan font-weight="700">${cfg.exact.toFixed(2)}</tspan>` : "exact price";
       const mx = (gx0 + gx1) / 2;
       R.band.setAttribute("x", (Number.isFinite(cfg.exact) ? px(cfg.exact) : mx) - 4);
       const plain = !cfg.sel, letters = ["A", "C", "S", "K"].filter((l) => L.f[l]).join("+");
-      R.gLabel.textContent = plain || !letters ? "Average payoff so far" : `Estimate with ${letters} so far`;
-      R.gNote.textContent = plain || !letters ? "" : "the engine\u2019s own estimate at this many balls";
+      R.gLabel.textContent = plain || !letters ? "Discounted average payoff" : `Estimate with ${letters}`;
+      R.gNote.textContent = plain || !letters ? "" : `engine estimate at n = ${fmtN(Math.min(S.count, trace?.length ? trace[trace.length - 1][0] : S.count))}`;
       let tv = plain ? meanPay() : traceAt(trace, S.count);
       if (!Number.isFinite(tv)) tv = meanPay();
       R.value.textContent = Number.isFinite(tv) && S.count ? tv.toFixed(2) : "\u2013";
@@ -577,23 +637,55 @@ const Board = (() => {
           R.stockNeedle.setAttribute("transform", `translate(${sn.toFixed(2)} 0)`); R.stockNeedle.setAttribute("opacity", "1");
           const pm = Number.isFinite(meanPay()) ? px(meanPay()) : NaN, ar = R.arrow;
           if (Number.isFinite(pm) && Number.isFinite(G.needle) && Math.abs(pm - G.needle) > 6) {
-            const ay2 = y0 + 82, dir = Math.sign(G.needle - pm);
+            const ay2 = ay + 12, dir = Math.sign(G.needle - pm);
             const ln = ar.firstChild; ln.setAttribute("x1", pm); ln.setAttribute("x2", G.needle - dir * 6); ln.setAttribute("y1", ay2); ln.setAttribute("y2", ay2);
             ar.childNodes[1].setAttribute("d", `M${G.needle} ${ay2} L${G.needle - dir * 8} ${ay2 - 4} L${G.needle - dir * 8} ${ay2 + 4} Z`);
             const t = ar.childNodes[2], lft = Math.min(pm, G.needle) > gx0 + 90; t.setAttribute("text-anchor", "middle"); t.setAttribute("x", ((pm + G.needle) / 2).toFixed(1)); t.setAttribute("y", ay2 - 5);
             ar.setAttribute("opacity", "1");
           } else ar.setAttribute("opacity", "0");
-          const stk = R.stockTicks; if (!stk.firstChild) stk.appendChild(el("text", { x: gx1, y: L.gy - 30 + 12, "font-size": "11.5", fill: ORANGE_D, "text-anchor": "end" }));
-          stk.firstChild.textContent = "known " + known.toFixed(2);
+          const stk = R.stockTicks; if (!stk.firstChild) stk.appendChild(el("text", { x: gx1, y: L.ycLab, "font-size": "11.5", fill: ORANGE_D, "text-anchor": "end" }));
+          stk.firstChild.textContent = "E[C] = " + known.toFixed(2);
         } else { R.stockNeedle.setAttribute("opacity", "0"); R.arrow.setAttribute("opacity", "0"); }
       }
+      if (L.wide) tape(px, tv, plain);
       S.needleSettled = !moving && Math.abs(G.range - half) < half * 0.002;
+    }
+    // the tape: the estimate against n, running down, on the gauge's own scale
+    function tape(px, tv, plain) {
+      const nMax = Math.max(500, S.planned), Y = (n) => (n / nMax) * L.tapeH, X = (v) => px.raw(v) - L.gx0, ex = cfg.exact, has = Number.isFinite(ex);
+      const sig = nMax + "|" + L.tapeH, txt = (y, t) => `<text x="9" y="${y.toFixed(1)}" font-size="11" fill="${MUTE}" stroke="#fafbfc" stroke-width="3" paint-order="stroke" stroke-linejoin="round">${t}</text>`;
+      if (G.tsig !== sig || !R.tTicks.firstChild) {
+        G.tsig = sig;
+        R.tTicks.innerHTML = ticks(0, nMax, 4).vals.filter((v) => v > 0.06 * nMax && v < nMax * 0.97).map((v) => `<line x1="0" x2="5" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="${GHOST}"/>` + txt(Y(v) + 4, fmtN(v))).join("") + txt(L.tapeH - 9, "n paths, running down");
+      }
+      R.tExact.setAttribute("opacity", has ? "1" : "0");
+      if (has) { R.tExact.setAttribute("x1", X(ex)); R.tExact.setAttribute("x2", X(ex)); }
+      const band = (c) => { const a = [], b = []; for (let k = 0; k <= 60; k++) { const n = Math.max(1, nMax * (k / 60) ** 2), w = c / Math.sqrt(n), y = Y(n).toFixed(1); a.push(clamp(X(ex - w), -60, 3000).toFixed(1) + " " + y); b.push(clamp(X(ex + w), -60, 3000).toFixed(1) + " " + y); } return [a, b]; };
+      const fn = has && cfg.funnel ? cfg.funnel : null, line = (p) => "M" + p.join("L");
+      const bp = fn ? band(fn[0]) : null, bm = fn && cfg.sel && Number.isFinite(fn[1]) ? band(fn[1]) : bp;
+      R.tPlain.setAttribute("d", bp && bm !== bp ? line(bp[0]) + line(bp[1]) : "");
+      R.tMine.setAttribute("d", bm ? line(bm[0]) + line(bm[1]) : "");
+      R.tBand.setAttribute("d", bm ? line(bm[0]) + "L" + [...bm[1]].reverse().join("L") + "Z" : "");
+      const follow = (tr) => {
+        if (!tr?.length) return "";
+        const end = Math.min(S.count, tr[tr.length - 1][0]), q = [];
+        if (end < 1) return "";
+        for (let k = 1; k <= 120; k++) { const n = (end * k) / 120; if (n >= tr[0][0] || k === 120) q.push(X(traceAt(tr, n)).toFixed(1) + " " + Y(n).toFixed(1)); }
+        return q.length > 1 ? line(q) : "";
+      };
+      const h = S.hist, st = Math.max(1, Math.ceil(h.length / 400)), q = [];
+      if (plain) for (let i = 0; i < h.length; i += st) q.push(X(h[i]).toFixed(1) + " " + Y(i + 1).toFixed(1));
+      R.tRun.setAttribute("d", plain ? (q.length > 1 ? line(q) : "") : follow(trace));
+      R.tCmp.setAttribute("d", plain ? "" : follow(compare));
+      const nEnd = plain ? S.count : Math.min(S.count, trace?.length ? trace[trace.length - 1][0] : 0), on = S.count && Number.isFinite(tv);
+      R.tDot.setAttribute("opacity", on ? "1" : "0");
+      if (on) { R.tDot.setAttribute("cx", X(tv).toFixed(1)); R.tDot.setAttribute("cy", clamp(Y(nEnd), 4, L.tapeH - 4).toFixed(1)); }
     }
 
     function updateDynamic(force) {
       if (!L) return;
       const f = L.f;
-      if (R.count) R.count.textContent = `${fmtN(S.count)} ball${S.count === 1 ? "" : "s"}`;
+      if (R.count) R.count.textContent = `${fmtN(S.count)} path${S.count === 1 ? "" : "s"}`;
       if (R.tray && f.kind) R.tray.textContent = fmtN(S.trays[f.kind]);
       if (f.S && R.lanes) {
         const total = S.lanes.reduce((a, v) => a + v, 0), b = S.cur || S.first;
@@ -605,38 +697,26 @@ const Board = (() => {
         s += `<line x1="${L.x0}" x2="${L.x1}" y1="${L.floor + 50.5}" y2="${L.floor + 50.5}" stroke="${GREEN}" stroke-width=".5"/>`;
         R.lanes.innerHTML = s;
       }
-      if (f.ring && R.curve && cfg.spec.product === "merton") {
-        const sp = cfg.spec, kappa = Math.exp(sp.muJ + sp.delta ** 2 / 2) - 1, drift = (sp.r - sp.q - sp.sigma ** 2 / 2 - sp.lam * kappa) * sp.T, lamT = sp.lam * sp.T, N = Math.max(S.count, 80);
-        const dln = (L.bw / (L.x1 - L.x0)) * (L.hi - L.lo), pts = [];
-        let peak = 0, peakX = 0;
+      if (R.curve) { // the law of ln S_T, scaled to the number of balls on the board
+        const sp = cfg.spec, jump = sp.product === "merton", lam = jump ? sp.lam : 0, muJ = jump ? sp.muJ : 0, dl = jump ? sp.delta : 0, N = Math.max(S.planned, 80), ck = [N, S.pitch.toFixed(3), L.W, L.H].join("|");
+        if (ck === S.curveKey && !force) return;
+        S.curveKey = ck;
+        const kappa = Math.exp(muJ + dl ** 2 / 2) - 1, drift = (sp.r - sp.q - sp.sigma ** 2 / 2 - lam * kappa) * sp.T, lamT = lam * sp.T, dln = L.bw / L.bx, pts = [];
+        let peak = 0, at = 0;
         for (let x = L.x0; x <= L.x1; x += 3) {
-          const y = Math.log(Math.exp(L.lo + ((x - L.x0) / (L.x1 - L.x0)) * (L.hi - L.lo)) / sp.S0);
+          const y = (x - L.ax) / L.bx;
           let dens = 0, w = Math.exp(-lamT);
-          for (let k = 0; k < 40; k++) { const v = sp.sigma ** 2 * sp.T + k * sp.delta ** 2, mu = drift + k * sp.muJ; dens += w * Math.exp(-((y - mu) ** 2) / (2 * v)) / Math.sqrt(2 * Math.PI * v); w *= lamT / (k + 1); }
-          const h = Math.min(L.floor - L.heapTop - 4, N * dens * dln * S.pitch);
-          pts.push([x, L.floor - h]);
-          if (h > peak) { peak = h; peakX = x; }
+          for (let k = 0; k < (jump ? 40 : 1); k++) { const v = sp.sigma ** 2 * sp.T + k * dl ** 2, mu = drift + k * muJ; dens += w * Math.exp(-((y - mu) ** 2) / (2 * v)) / Math.sqrt(2 * Math.PI * v); w *= lamT / (k + 1); }
+          const h = Math.min(L.heapH - 2, N * dens * dln * S.pitch);
+          pts.push([x, L.floor - 1 - h]);
+          if (h > peak) { peak = h; at = pts.length - 1; }
         }
-        R.curve.setAttribute("d", pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(""));
-        const ballTop = (xa, xb) => { // highest ball between two x positions
-          let t = L.floor;
-          for (let bb = Math.max(0, Math.floor((xa - L.x0) / L.bw)); bb <= Math.min(L.nb - 1, Math.floor((xb - L.x0) / L.bw)); bb++) if (S.reserved[bb]) t = Math.min(t, slotY(S.reserved[bb] - 1) - L.r);
-          return t;
-        };
-        const lw = 150, py = L.floor - peak;
-        const cands = [[peakX + 14, "start"], [peakX - 14, "end"]].filter(([x, an]) => (an === "start" ? x + lw <= L.x1 - 4 : x - lw >= L.x0));
-        let best = null;
-        for (const [x, an] of cands) { // the label sits at the peak's height, or just above any balls under it
-          const top = ballTop(an === "start" ? x : x - lw, an === "start" ? x + lw : x), y = Math.min(py + 3, top - 5);
-          const xa = an === "start" ? x : x - lw, xb = xa + lw;
-          if (y >= L.heapTop + 12 && !(L.xK > xa - 3 && L.xK < xb + 3)) { best = { x, an, y }; break; }
-        }
-        if (!best) { // beside the strike line, a row below its labels, on whichever side has room, never across the line
-          const left = L.xK - 10 - lw >= L.x0, x = left ? L.xK - 10 : L.xK + 10, an = left ? "end" : "start";
-          const top = ballTop(left ? x - lw : x, left ? x : x + lw);
-          best = { x, an, y: Math.max(L.heapTop + 26, Math.min(L.heapTop + 30, top - 5)) };
-        }
-        R.curveLabel.setAttribute("x", best.x); R.curveLabel.setAttribute("y", best.y); R.curveLabel.setAttribute("text-anchor", best.an); R.curveLabel.textContent = "the formula fills this in";
+        R.curve.setAttribute("d", peak < 5 ? "" : pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(""));
+        let q = at;
+        while (q < pts.length - 1 && L.floor - 1 - pts[q][1] > 0.5 * peak) q++;
+        const lab = jump ? "Merton density of ln S" : "Gaussian density of ln S", room = pts[q][0] + 10 + lab.length * 5.7 < L.XR;
+        R.curveLabel.textContent = peak < 22 || !room ? "" : lab;
+        R.curveLabel.setAttribute("x", (pts[q][0] + 10).toFixed(1)); R.curveLabel.setAttribute("y", pts[q][1].toFixed(1)); R.curveLabel.setAttribute("text-anchor", "start");
       }
     }
 
@@ -653,23 +733,28 @@ const Board = (() => {
       if (S.qi && S.qi === S.launchQ.length) { S.launchQ.length = 0; S.qi = 0; }
       const act = S.active;
       for (let k = act.length - 1; k >= 0; k--) if (!step(act[k])) { act[k] = act[act.length - 1]; act.pop(); }
-      // ball positions to the GPU
-      if (buf.length < act.length * 8) buf = new Float32Array(act.length * 16);
-      let n = 0;
+      // balls to the GPU: a short blur behind every falling ball, then the ball
+      const target = pitchFor(Math.max(S.maxRes, S.futureRes));
+      S.moved = S.pitch !== target;
+      if (S.moved) { S.pitch += (target - S.pitch) * (1 - Math.exp(-dt / 160)); if (Math.abs(S.pitch - target) < 0.004) S.pitch = target; if (!gl) S.dirty = true; }
+      S.glow = false;
+      let n = gl ? scenery(0) : 0;
       for (const b of act) {
-        if (b.phase === 0 && !(b.x >= 0)) continue;
-        const o = n++ * 8, c = b.col;
-        buf[o] = b.x; buf[o + 1] = b.y; buf[o + 2] = (b.rad || L.r) * 2 + 1.5; buf[o + 3] = c[0]; buf[o + 4] = c[1]; buf[o + 5] = c[2]; buf[o + 6] = b.alpha; buf[o + 7] = b.ring;
-        if (b.t) drawTrail(b.t, b);
+        if (b.phase === 0) {
+          const t = S.clock - b.t0;
+          if (!b.one) for (const [late, al] of [[34, 0.1], [17, 0.22]]) if (t > late) { place(b, t - late); n = put(n, b.x, b.y, b.rad * 0.92, b.col, al * b.alpha, 0); }
+          place(b, t);
+        }
+        n = put(n, b.x, b.y, b.rad || L.r, b.col, b.alpha, b.ring);
+        if (b.t && b.phase === 0) drawTrail(b.t, b);
       }
       paintFront(n);
-      const pitchNow = pitchFor(S.maxRes);
-      if (pitchNow !== S.pitch) { S.pitch = pitchNow; S.dirty = true; }
       if (S.dirty) { S.dirty = false; paintBoard(); updateDynamic(); }
       if (S.gaugeDirty || !S.needleSettled || G.trail.length > 1) { updateGauge(dt, false); S.gaugeDirty = false; if (G.trail.length > 1 && S.needleSettled && G.trail.length) { G.trail.shift(); if (G.trail.length > 1) S.needleSettled = false; } }
-      if (S.landedFrame) { updateDynamic(); const info = { count: S.count, ST: S.last.ST, payoff: S.last.payoff, mean: meanPay(), exact: cfg.exact }; for (const fn of listeners.land) fn(info); }
-      if (ariaDirty && ts - lastAria > 1000) { lastAria = ts; ariaDirty = false; ariaCount = S.count; live.textContent = `${fmtN(S.count)} ball${S.count === 1 ? "" : "s"} dropped. Average payoff ${meanPay().toFixed(1)}. True price ${Number.isFinite(cfg.exact) ? cfg.exact.toFixed(2) : "not known yet"}.`; }
-      if (act.length || S.qi < S.launchQ.length || !S.needleSettled || S.dirty || ariaDirty || G.trail.length > 1) raf = requestAnimationFrame(frame);
+      if (S.landedFrame || S.moved) updateDynamic();
+      if (S.landedFrame) { const info = { count: S.count, ST: S.last.ST, payoff: S.last.payoff, mean: meanPay(), exact: cfg.exact }; for (const fn of listeners.land) fn(info); }
+      if (ariaDirty && ts - lastAria > 1000) { lastAria = ts; ariaDirty = false; ariaCount = S.count; live.textContent = `${fmtN(S.count)} path${S.count === 1 ? "" : "s"} simulated. Discounted average payoff ${meanPay().toFixed(1)}. Exact price ${Number.isFinite(cfg.exact) ? cfg.exact.toFixed(2) : "not known yet"}.`; }
+      if (act.length || S.qi < S.launchQ.length || !S.needleSettled || S.dirty || S.moved || S.glow || ariaDirty || G.trail.length > 1) raf = requestAnimationFrame(frame);
       else last = 0;
     }
 
@@ -708,19 +793,23 @@ const Board = (() => {
         if (!picks || gen !== S.gen || destroyed) return;
         for (const t of S.trails) t.el?.remove();
         S.trails = []; R.notch && (R.notch.innerHTML = ""); R.chips && (R.chips.innerHTML = ""); S.chips = [];
-        S.routes = {}; R.routes && (R.routes.innerHTML = ""); R.routeEls = {};
         return new Promise((res) => {
-          const dr = { left: picks.length, res }, f = L.f, one = pace === "one", span = Math.min(3000, 250 + n * 1.2), balls = [];
-          const dur = one ? 1900 : 1400;
+          const dr = { left: picks.length, res }, f = L.f, one = pace === "one", span = o.span || Math.min(3400, 250 + n * 1.5), balls = [];
           picks.forEach(([b, i], k) => {
             const pair = f.A && b.anti;
             const slot = one ? (pair ? Math.floor(k / 2) * 2000 : k * 2000) : pair ? Math.floor(k / 2) * (span / (n / 2)) : (k * span) / n;
-            const ball = { b, i, t0: S.clock + slot, dur0: dur, one, pair, twin: pair, blue: one && pair, drop: dr, chip: one, faint: !one && ((pair && k < 64) || (!pair && n <= 64)), keep: !one && k >= n - 24, trail: one ? { color: pair ? BLUE : INK, w: pair ? 1.4 : 1.2, op: pair ? 0.8 : 1 } : null, phase: -1 };
+            const twin = Boolean(pair && i >= b.half);
+            const ball = { b, i, t0: S.clock + slot, one, pair, twin, drop: dr, chip: one, trail: one ? { color: twin ? BLUE : INK, w: 1.4, op: 0.8 } : null, phase: -1 };
             balls.push(ball);
           });
+          // final heap heights are known now, so the heap scales once, at the start
+          const tally = Int32Array.from(S.reserved);
+          for (const ball of balls) { const bb = ball.b; if (L.f.shade || !bb.fate[ball.i]) tally[binOf(L.ax + L.bx * bb.heap[ball.i])]++; }
+          S.futureRes = Math.max(S.futureRes, ...tally); S.planned = Math.max(S.planned, S.count) + picks.length; S.gaugeDirty = true;
+          updateDynamic();
           if (still) {
             S.drops.push(dr);
-            for (const ball of balls) { prepare(ball); ball.x = ball.xBin; ball.y = ball.yLand; ball.phase = 2; commit(ball); }
+            for (const ball of balls) { prepare(ball); commit(ball); }
             S.pitch = pitchFor(S.maxRes); S.dirty = true; kick();
             return;
           }

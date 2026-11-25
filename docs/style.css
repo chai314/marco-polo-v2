@@ -129,7 +129,9 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 980px; gap: 22px 30px; padding: 18px 0 22px; border-top: 1px solid var(--rule); }
 .cols article h3 { font-size: 15px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
 .cols article p { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); margin: 6px 0 0; max-width: 62ch; }
-.cols math[display="block"] { font-size: 18px; margin: 12px 0 8px; display: block math; math-style: normal; text-align: left; }
+.cols .eq { font-size: 17px; margin: 10px 0 8px; text-align: left; }
+.reading .lead p { margin: 0 0 10px; }
+.reading .lead .eq { text-align: left; font-size: 18px; margin: 8px 0 4px; }
 .refs { font-size: 12.5px; color: var(--ink-3); max-width: 100ch; border-top: 1px solid var(--rule); padding-top: 14px; margin: 0; }
 
 /* ------------------------------------------------------------ rail */
@@ -357,3 +359,16 @@ body[data-step] .step:not(.on) { opacity: .32; }
   .exhibit { height: 44svh; }
   .step:not(.hero) { padding-left: 20px; padding-right: 20px; }
 }
+
+/* ============================================================ mathematics, typeset by tools/build_math.py */
+[data-tex] { display: inline-block; line-height: 1; font-size: 1.1em; white-space: nowrap; }
+[data-tex] svg { display: inline-block; overflow: visible; }
+.eq { display: block; text-align: center; margin: 4px 0 20px; padding: 2px 0; font-size: 19px; color: var(--ink); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.eq svg { display: inline-block; overflow: visible; max-width: 100%; height: auto; vertical-align: middle; }
+.tex-missing { font-family: var(--math); font-style: italic; color: var(--red); }
+.story .readout [data-tex], .story .aside [data-tex] { font-size: 1.05em; }
+.story h2 [data-tex] { font-size: .95em; }
+.story { grid-template-columns: minmax(400px, 600px) minmax(0, 1fr); }
+.story h1 { font-size: clamp(40px, 4.3vw, 64px); }
+.story .step p + .eq { margin-top: -2px; }
+@media (max-width: 640px) { .eq { font-size: 16.5px; } }
