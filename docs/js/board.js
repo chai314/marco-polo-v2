@@ -223,7 +223,8 @@ const Board = (() => {
         // strike and payoff zone label
         s += `<line x1="${L.xK.toFixed(1)}" x2="${L.xK.toFixed(1)}" y1="${L.heapTop}" y2="${L.floor}" stroke="${INK}" stroke-width="1.4"/>`;
         s += T(L.xK + (sp.call ? -6 : 6), L.heapTop - 5, `strike ${fmtP(sp.K)}`, { a: sp.call ? "end" : "start", fill: INK, bold: true });
-        s += T(L.xK + (sp.call ? 6 : -6), L.heapTop - 5, "pays here", { a: sp.call ? "start" : "end", fill: MUTE });
+        // "pays here" shares the row with the ball count at the right edge: keep it only where it fits
+        if (!sp.call || L.xK + 6 + 62 < L.x1 - 84) s += T(L.xK + (sp.call ? 6 : -6), L.heapTop - 5, "pays here", { a: sp.call ? "start" : "end", fill: MUTE });
         if (sp.product === "asian") s += T(sp.call ? L.x0 : L.x1, L.heapTop + 15, "heaped by each path’s average", { a: sp.call ? "start" : "end", size: 11.5 });
       }
       // gadgets in the pin field
@@ -630,7 +631,11 @@ const Board = (() => {
           const xa = an === "start" ? x : x - lw, xb = xa + lw;
           if (y >= L.heapTop + 12 && !(L.xK > xa - 3 && L.xK < xb + 3)) { best = { x, an, y }; break; }
         }
-        if (!best) { const [x, an] = cands[0] || [clamp(peakX - lw / 2, L.x0, L.x1 - lw), "start"]; best = { x, an, y: L.heapTop + 12 }; }
+        if (!best) { // beside the strike line, a row below its labels, on whichever side has room, never across the line
+          const left = L.xK - 10 - lw >= L.x0, x = left ? L.xK - 10 : L.xK + 10, an = left ? "end" : "start";
+          const top = ballTop(left ? x - lw : x, left ? x : x + lw);
+          best = { x, an, y: Math.max(L.heapTop + 26, Math.min(L.heapTop + 30, top - 5)) };
+        }
         R.curveLabel.setAttribute("x", best.x); R.curveLabel.setAttribute("y", best.y); R.curveLabel.setAttribute("text-anchor", best.an); R.curveLabel.textContent = "the formula fills this in";
       }
     }
