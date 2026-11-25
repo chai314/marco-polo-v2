@@ -64,7 +64,7 @@
       <p>For every ball, we drop a twin that gets the opposite nudge at every pin. When one flies far right, the other flies far left.</p>
       <p>For a call, one twin often pays a lot while the other pays little. Their average swings much less than the average of two strangers.</p>
       <p class="aside">This works when the payoff only moves one way as the price rises, as it does for a call or a put. Each twin costs a full ball, and we count it.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2"><span>Drop a pair</span></button><button type="button" class="press ghost" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2"><span>Drop a pair</span></button><button type="button" class="press ghost" data-act="drop" data-n="2000"><span>Drop 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn A off</span></button></div>
       <p class="readout" data-live="trick:A"></p>
     </section>
 
@@ -73,7 +73,7 @@
       <p>Random balls bunch up by luck: too many in one spot, too few in another. So we cut the landing zone into 32 lanes that are all equally likely, and send exactly the same number of balls down each one.</p>
       <p>The luck of which lane a ball picks is gone. Only the luck inside each lane is left.</p>
       <p class="aside">Under the hood, we fix where each path is headed overall, then fill in the day-to-day wiggles at random.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn S off</span></button></div>
       <p class="readout" data-live="trick:S"></p>
     </section>
 
@@ -82,7 +82,7 @@
       <p>There is one thing we know exactly: the average final price of the stock itself. So we track it on the same balls.</p>
       <p>If the balls happen to land too high, the stock average comes out too high. The option estimate is then probably too high as well. We know the stock’s mistake exactly, so we subtract a matching share of it from the option.</p>
       <p class="aside">That share is called β. We learn it from a small separate trial run, so the trick never tilts the answer.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn C off</span></button></div>
       <p class="readout" data-live="trick:C"></p>
     </section>
 
@@ -91,14 +91,14 @@
       <p>Now let the stock jump. About <b data-live="lam">0.43</b> times a year, it drops suddenly, by <b data-live="muJ">28%</b> on a typical jump. The market’s option prices tell us to expect this.</p>
       <p>Here is the trick. Once we know how many jumps happen, the rest of the path is smooth, and a formula prices it exactly. So we roll dice only for the number of jumps. The formula does the rest.</p>
       <p class="aside">For barrier options, K works differently. Instead of checking whether a ball touched the barrier, we compute the chance that it brushed it between two rows of pins.</p>
-      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button><button type="button" class="press ghost" data-act="toggle"><span>Turn K off</span></button></div>
       <p class="readout" data-live="trick:K"></p>
     </section>
 
     <section class="step" data-step="mix" aria-labelledby="h-mix">
       <h2 id="h-mix">Mix the tricks</h2>
       <p>Tricks can be combined. Sometimes their gains multiply. Sometimes they fight over the same noise: S and C both go after where the ball ends up, so together they are not twice as good.</p>
-      <p>Here are all 15 combinations for the jumping stock, each with the same budget. Tap one to bolt it onto the board.</p>
+      <p>Here are all 15 combinations for the jumping stock, plus plain for comparison, each with the same budget. Tap one to bolt it onto the board.</p>
       <ol id="story-rank" class="story-rank"></ol>
       <div class="acts"><a class="press" href="#lab"><span>Open the lab</span></a></div>
     </section>

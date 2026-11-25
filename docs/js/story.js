@@ -24,7 +24,7 @@
   let mixSel = 12;
 
   // step -> [spec, sel]
-  const CONFIG = (step) => ({ A: ["GBM", 1], S: ["GBM", 4], C: ["GBM", 2], K: ["JUMP", 8], mix: ["JUMP", mixSel] })[step] || ["GBM", 0];
+  const CONFIG = (step) => { const c = ({ A: ["GBM", 1], S: ["GBM", 4], C: ["GBM", 2], K: ["JUMP", 8], mix: ["JUMP", mixSel] })[step] || ["GBM", 0]; return off[step] ? [c[0], 0] : c; };
 
   // ---------------------------------------------------------------- numbers that need no engine
   const live = (key, text) => all(`[data-live="${key}"]`).forEach((el) => { el.textContent = text; });
@@ -48,17 +48,24 @@
   const exactOf = (name) => once("exact" + name, () => eng("reference", { spec: SPECS[name] }));
   const errOf = (name, flags, reps = 200) => once(`err${name}${flags}${reps}`, () => eng("replicate", { spec: SPECS[name], flags, n: N, strata: STRATA, seed: 101, reps }).then(honest));
   const pm = (e) => `±${(1.96 * e.real).toPrecision(2)}`;
+  // one format for every factor: 7.8×, 10×, 313×, 3,260×
+  const fx = (f) => (f < 9.95 ? f.toFixed(1) : Math.round(f).toLocaleString("en")) + "×";
   const factor = (p, e) => (p.real ** 2 * p.paths) / (e.real ** 2 * e.paths);
 
-  const settled = {}; // exact prices once known
+  const settled = {}, settledErr = {}; // exact prices and plain 95% errors once known
+  const trickBase = {}, trickExtra = {}, off = { A: false, S: false, C: false, K: false };
+  const MISS = " This particular run happened to miss by more; the \u00b1 describes a typical run.";
+  const renderTrick = (l) => live("trick:" + l, off[l] ? "Showing plain balls for comparison." : (trickBase[l] || "") + (trickExtra[l] || ""));
   exactOf("GBM").then((v) => { settled.GBM = v; live("exact", v.toFixed(2)); }, () => {});
   exactOf("JUMP").then((v) => { settled.JUMP = v; }, () => {});
+  for (const name of ["GBM", "JUMP"]) errOf(name, 0).then((e) => { settledErr[name] = 1.96 * e.real; }, () => {});
   errOf("GBM", 0).then((p) => live("err:0", pm(p)), () => {});
   for (const [l, name] of [["A", "GBM"], ["S", "GBM"], ["C", "GBM"], ["K", "JUMP"]]) {
     Promise.all([errOf(name, 0), errOf(name, BIT[l])]).then(([p, e]) => {
       const f = factor(p, e), was = pm(p), now = pm(e);
-      live("trick:" + l, f < 0.95 ? `Here it makes things worse: ${was} becomes ${now}.` : f < 1.08 ? `Here it barely helps: ${was} becomes ${now}.`
-        : `Same ${N.toLocaleString("en")} balls: the error drops from ${was} to ${now}. That is as good as ${big(f)} times more plain balls.`);
+      trickBase[l] = f < 0.95 ? `Here it makes things worse: ${was} becomes ${now}.` : f < 1.08 ? `Here it barely helps: ${was} becomes ${now}.`
+        : `Same ${N.toLocaleString("en")} balls: the error drops from ${was} to ${now}. That is as good as ${fx(f)} more plain balls.`;
+      renderTrick(l);
     }, () => {});
   }
 
@@ -71,12 +78,13 @@
     if (!board) return Promise.resolve();
     const [name, sel] = CONFIG(step), key = name + sel;
     if (cur && cur.key === key) return cur.ready;
-    const spec = SPECS[name], mine = ++token, exact = settled[name] ?? NaN;
-    board.set({ spec, sel, seed: 7, exact });
+    const spec = SPECS[name], mine = ++token, exact = settled[name] ?? NaN, E = settledErr[name];
+    const cfg = (ex, e) => ({ spec, sel, seed: 7, exact: ex, ...(Number.isFinite(ex) && Number.isFinite(e) ? { gaugeRange: [ex - 1.6 * e, ex + 1.6 * e] } : {}) });
+    board.set(cfg(exact, E));
     const c = (cur = { key, name, sel });
-    c.ready = Promise.all([exactOf(name), traceOf(name, sel), sel ? traceOf(name, 0) : null]).then(([ex, t, plain]) => {
+    c.ready = Promise.all([exactOf(name), errOf(name, 0), traceOf(name, sel), sel ? traceOf(name, 0) : null]).then(([ex, pe, t, plain]) => {
       if (mine !== token) return;
-      if (!(exact === ex)) board.set({ spec, sel, seed: 7, exact: ex });
+      if (!(exact === ex && E === 1.96 * pe.real)) board.set(cfg(ex, 1.96 * pe.real));
       board.setTrace(t, word(sel));
       board.setCompare(sel ? plain : null);
     }).catch((e) => { if (e.message !== "stale") console.error(e); });
@@ -84,6 +92,7 @@
   }
 
   function setActive(step) {
+    if (step !== active && step in off) { off[step] = false; trickExtra[step] = ""; renderTrick(step); toggleLabel(step); }
     active = step;
     all(".step").forEach((s) => s.classList.toggle("on", s.dataset.step === step));
     document.body.dataset.step = step;
@@ -104,7 +113,8 @@
   all(".step").forEach((s) => s.classList.toggle("on", s.dataset.step === "hero"));
 
   let cloudStarted = false;
-  let auto = Promise.resolve(), singles = 0;
+  let auto = Promise.resolve(), singles = 0, cleared = false;
+  const toggleLabel = (l) => all(`section[data-step="${l}"] [data-act="toggle"] span`).forEach((x) => { x.textContent = `Turn ${l} ${off[l] ? "on" : "off"}`; });
   // a drop the page makes on its own; it never writes the lastBall readout
   function autoDrop(n) {
     auto = (async () => {
@@ -113,7 +123,7 @@
     return auto;
   }
   function onEnter(step) {
-    if (step === "cost" && !cloudStarted) { cloudStarted = true; cloudPick(500); }
+    if (step === "cost" && !cloudStarted) { cloudStarted = true; cloudStart(); }
     if (step === "mix" && board && board.count === 0) autoDrop(2000);
   }
 
@@ -128,9 +138,43 @@
         try {
           if (step !== active) await setActive(step); else await cur.ready;
           await auto; // let a drop the page started finish first
+          if (n === 1 && !cleared) { cleared = true; board.clear(); } // the first single ball lands on an empty heap
           lastDrop = n;
           if (n === 1) singles++;
+          if (step in off) { trickExtra[step] = ""; renderTrick(step); }
           await board.drop(n);
+          if (step in off) await verdict(step, n);
+        } catch (e) { if (e && e.message !== "stale") console.error(e); } finally { b.removeAttribute("aria-busy"); }
+      });
+    });
+  }
+
+  // after a trick chapter's drop: say so when this run's needle ended farther off than plain's
+  async function verdict(step, n) {
+    if (n < N || off[step] || step !== active) return;
+    const [name, sel] = CONFIG(step), key = cur && cur.key;
+    const [mine, plain] = await Promise.all([traceOf(name, sel), traceOf(name, 0)]), ex = settled[name];
+    if (step !== active || (cur && cur.key !== key) || !Number.isFinite(ex)) return;
+    if (Math.abs(mine[mine.length - 1][1] - ex) > Math.abs(plain[plain.length - 1][1] - ex)) { trickExtra[step] = MISS; renderTrick(step); }
+  }
+  function wireToggles() {
+    all('[data-act="toggle"]').forEach((b) => {
+      b.addEventListener("click", async () => {
+        if (b.getAttribute("aria-busy") === "true" || !board) return;
+        const step = b.closest(".step").dataset.step;
+        b.setAttribute("aria-busy", "true");
+        try {
+          if (step !== active) await setActive(step);
+          await auto;
+          off[step] = !off[step];
+          trickExtra[step] = "";
+          toggleLabel(step);
+          renderTrick(step);
+          await setActive(step);
+          await cur.ready;
+          lastDrop = N;
+          await board.drop(N);
+          await verdict(step, N);
         } catch (e) { if (e && e.message !== "stale") console.error(e); } finally { b.removeAttribute("aria-busy"); }
       });
     });
@@ -148,79 +192,92 @@
     });
   }
 
-  // ---------------------------------------------------------------- the cloud of experiments
-  const cloud = { W: 0, H: 96, n: 500, prices: null, ready: false, seq: 0 };
-  const NS = "http://www.w3.org/2000/svg";
+  // ---------------------------------------------------------------- the cloud of experiments: four rows, one shared scale
+  const NS = "http://www.w3.org/2000/svg", ROWS = [500, 2000, 8000, 32000], PITCH = 46, TOP = 36, CH = 208, LEFT = 74, RIGHT = 52, DOTS = 40;
+  const cloud = { W: 0, svg: null, rows: [], data: [], runs: [0, 0, 0, 0], exact: NaN, half: NaN };
   const svgEl = (tag, attrs = {}, parent) => { const el = document.createElementNS(NS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); if (parent) parent.appendChild(el); return el; };
-  const jitter = Array.from({ length: 60 }, (_, i) => 30 + 28 * (((i * 2654435761) >>> 0) % 997) / 997);
+  const jit = (i) => ((((i + 1) * 2654435761) >>> 0) % 997) / 997;
 
   function cloudBuild() {
     const host = $("cloud");
     if (!host) return;
-    cloud.W = Math.max(200, host.clientWidth);
+    cloud.W = Math.max(240, host.clientWidth);
     host.textContent = "";
-    const s = (cloud.svg = svgEl("svg", { width: "100%", height: cloud.H, viewBox: `0 0 ${cloud.W} ${cloud.H}`, role: "img", "aria-label": "The answers of 60 experiments" }, host));
+    const s = (cloud.svg = svgEl("svg", { width: "100%", height: CH, viewBox: `0 0 ${cloud.W} ${CH}`, role: "img", "aria-label": "Four rows of 40 experiments each" }, host));
     s.style.display = "block";
     s.style.overflow = "visible";
-    const t = reduced() ? "none" : "transform 500ms ease";
-    cloud.line = svgEl("line", { y1: 14, y2: 74, stroke: "#f2c200", "stroke-width": 3 }, s);
-    cloud.tag = svgEl("text", { y: 11, class: "lab" }, s);
+    const tr = reduced() ? "none" : "transform 500ms ease", mid = LEFT + (cloud.W - LEFT - RIGHT) / 2;
+    cloud.mid = mid;
+    cloud.line = svgEl("line", { x1: mid, x2: mid, y1: 18, y2: CH - 6, stroke: "#f2c200", "stroke-width": 3 }, s);
+    cloud.tag = svgEl("text", { x: mid + 7, y: 12, class: "lab" }, s);
     cloud.tag.textContent = "true price";
-    cloud.dots = jitter.map((y) => { const c = svgEl("circle", { r: 3.5, cx: 0, cy: 0, fill: "#14171a", "fill-opacity": 0.55 }, s); c.style.transition = t; c.dataset.y = y; return c; });
-    cloud.brk = svgEl("path", { d: "M0 0V6H1V0", fill: "none", stroke: "#14171a", "stroke-width": 1.4, "vector-effect": "non-scaling-stroke" }, s);
-    cloud.brk.style.transition = t;
-    cloud.lab = svgEl("text", { y: 92, class: "lab", "text-anchor": "middle" }, s);
-    cloud.lab.style.transition = t;
-    cloud.line.setAttribute("x1", cloud.W / 2); cloud.line.setAttribute("x2", cloud.W / 2);
-    cloud.tag.setAttribute("x", cloud.W / 2 + 7);
-    cloud.dots.forEach((c) => { c.style.transform = `translate(${cloud.W / 2}px, ${c.dataset.y}px)`; });
-    cloud.brk.style.transform = `translate(${cloud.W / 2}px, 66px) scaleX(0)`;
-    cloud.lab.style.transform = `translate(${cloud.W / 2}px, 0)`;
+    cloud.rows = ROWS.map((n, r) => {
+      const y = TOP + r * PITCH, g = svgEl("g", {}, s);
+      const name = svgEl("text", { x: 0, y: y + 4, class: "lab" }, g);
+      name.textContent = `${n.toLocaleString("en")} balls`;
+      const dots = Array.from({ length: DOTS }, (_, i) => {
+        const c = svgEl("circle", { r: 3.5, cx: 0, cy: 0, fill: "#14171a", "fill-opacity": 0.55 }, g), dy = y - 13 + 22 * jit(i * 7 + r);
+        c.style.transition = tr; c.dataset.y = dy; c.style.transform = `translate(${mid}px, ${dy}px)`;
+        return c;
+      });
+      const brk = svgEl("path", { d: "M0 0V6H1V0", fill: "none", stroke: "#14171a", "stroke-width": 1.4, "vector-effect": "non-scaling-stroke" }, g);
+      brk.style.transition = tr; brk.style.transform = `translate(${mid}px, ${y + 14}px) scaleX(0)`;
+      const lab = svgEl("text", { x: cloud.W, y: y + 18, class: "lab b", "text-anchor": "end" }, g);
+      return { n, y, dots, brk, lab };
+    });
   }
-  function cloudDraw() {
-    if (!cloud.svg || !cloud.prices || cloud.half == null) return;
-    const exact = cloud.exact, mid = cloud.W / 2, span = mid - 10, X = (v) => Math.max(6, Math.min(cloud.W - 6, mid + ((v - exact) / cloud.half) * span));
-    cloud.dots.forEach((c, i) => { c.style.transform = `translate(${X(cloud.prices[i]).toFixed(1)}px, ${c.dataset.y}px)`; });
-    const p = [...cloud.prices].sort((a, b) => a - b), at = (f) => { const x = f * (p.length - 1), i = Math.floor(x); return p[i] + (p[Math.min(i + 1, p.length - 1)] - p[i]) * (x - i); };
-    const lo = at(0.025), hi = at(0.975), x1 = X(lo), x2 = X(hi), halfSpan = (hi - lo) / 2;
-    cloud.brk.style.transform = `translate(${x1.toFixed(1)}px, 66px) scaleX(${Math.max(1, x2 - x1).toFixed(1)})`;
-    cloud.lab.textContent = `±${halfSpan.toPrecision(2)}`;
-    cloud.lab.style.transform = `translate(${Math.max(24, Math.min(cloud.W - 24, (x1 + x2) / 2)).toFixed(1)}px, 0)`;
-    cloud.svg.setAttribute("aria-label", `60 experiments of ${cloud.n.toLocaleString("en")} balls each. The middle 95% of the answers fall within ±${halfSpan.toPrecision(2)} of the true price.`);
+  function cloudDraw(r) {
+    const prices = cloud.data[r];
+    if (!cloud.svg || !prices || !Number.isFinite(cloud.half)) return;
+    const row = cloud.rows[r], span = (cloud.W - LEFT - RIGHT) / 2 - 4, X = (v) => Math.max(LEFT + 4, Math.min(cloud.W - RIGHT - 4, cloud.mid + ((v - cloud.exact) / cloud.half) * span));
+    row.dots.forEach((c, i) => { c.style.transform = `translate(${X(prices[i]).toFixed(1)}px, ${c.dataset.y}px)`; });
+    const p = [...prices].sort((a, b) => a - b), at = (f) => { const x = f * (p.length - 1), i = Math.floor(x); return p[i] + (p[Math.min(i + 1, p.length - 1)] - p[i]) * (x - i); };
+    const lo = at(0.025), hi = at(0.975), x1 = X(lo), x2 = X(hi), e = (hi - lo) / 2;
+    row.brk.style.transform = `translate(${x1.toFixed(1)}px, ${row.y + 14}px) scaleX(${Math.max(1, x2 - x1).toFixed(1)})`;
+    row.lab.textContent = `\u00b1${e.toPrecision(2)}`;
+    row.err = e;
+    cloud.svg.setAttribute("aria-label", "Four rows of 40 experiments: " + cloud.rows.map((q) => (q.err != null ? `${q.n.toLocaleString("en")} balls, the middle 95% within \u00b1${q.err.toPrecision(2)}` : "")).filter(Boolean).join("; ") + ".");
   }
-  async function cloudPick(n) {
-    all('[data-act="cloud"]').forEach((b) => { const on = Number(b.dataset.n) === n; b.setAttribute("aria-checked", on); b.tabIndex = on ? 0 : -1; });
-    cloud.n = n;
-    const seq = ++cloud.seq;
+  async function cloudRun(r) {
+    const run = ++cloud.runs[r], seed = 202 + r + 1000 * (run - 1);
+    try {
+      const g = await eng("replicate", { spec: GBM, flags: 0, n: ROWS[r], strata: STRATA, seed, reps: DOTS });
+      if (run !== cloud.runs[r]) return;
+      cloud.data[r] = [...g.price];
+      cloudDraw(r);
+    } catch (e) { if (e.message !== "stale") console.error(e); }
+  }
+  async function cloudStart() {
     if (!cloud.svg) cloudBuild();
     try {
-      const [exact, base, g] = await Promise.all([exactOf("GBM"), errOf("GBM", 0), eng("replicate", { spec: GBM, flags: 0, n, strata: STRATA, seed: 202, reps: 60 })]);
-      if (seq !== cloud.seq) return;
+      const [exact, base] = await Promise.all([exactOf("GBM"), errOf("GBM", 0)]);
       cloud.exact = exact;
-      cloud.half = 3.2 * 1.96 * base.real * Math.sqrt(N / 500); // fixed: the 95% error at 500 balls
-      cloud.prices = [...g.price];
-      cloud.line.setAttribute("x1", cloud.W / 2);
-      cloudDraw();
+      cloud.half = 1.6 * 1.96 * base.real * Math.sqrt(N / 500); // one fixed scale: 1.6 times the 95% error at 500 balls
+      ROWS.forEach((_, r) => cloudRun(r));
     } catch (e) { if (e.message !== "stale") console.error(e); }
+  }
+  function cloudPick(i) {
+    all('[data-act="cloud"]').forEach((b, k) => { b.setAttribute("aria-checked", k === i); b.tabIndex = k === i ? 0 : -1; });
+    if (cloud.svg && Number.isFinite(cloud.half)) cloudRun(i);
   }
   function wireCloud() {
     const radios = all('[data-act="cloud"]');
-    radios.forEach((b) => {
-      b.setAttribute("aria-checked", Number(b.dataset.n) === 500);
-      b.tabIndex = Number(b.dataset.n) === 500 ? 0 : -1;
-      b.addEventListener("click", () => { cloudStarted = true; cloudPick(Number(b.dataset.n)); });
+    radios.forEach((b, i) => {
+      b.setAttribute("aria-checked", i === 0);
+      b.tabIndex = i === 0 ? 0 : -1;
+      b.addEventListener("click", () => cloudPick(i));
       b.addEventListener("keydown", (e) => {
         const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
         if (!d) return;
         e.preventDefault();
-        const nb = radios[(radios.indexOf(b) + d + radios.length) % radios.length];
-        nb.focus();
-        nb.click();
+        const k = (i + d + radios.length) % radios.length;
+        radios[k].focus();
+        cloudPick(k);
       });
     });
     if ($("cloud")) {
       let last = 0;
-      new ResizeObserver(() => { const w = $("cloud").clientWidth; if (!w || Math.abs(w - last) < 2) return; last = w; if (cloud.svg) { cloudBuild(); cloudDraw(); } }).observe($("cloud"));
+      new ResizeObserver(() => { const w = $("cloud").clientWidth; if (!w || Math.abs(w - last) < 2) return; last = w; if (cloud.svg) { cloudBuild(); ROWS.forEach((_, r) => cloudDraw(r)); } }).observe($("cloud"));
     }
   }
 
@@ -234,7 +291,7 @@
     const rows = flags.map((f) => [f, vrf[f]]).sort((a, b) => b[1] - a[1]), top = Math.max(...rows.map((x) => x[1])), span = Math.log(Math.max(top, 1.5));
     host.innerHTML = rows.map(([f, v]) => {
       const w = v >= 1 ? Math.max(0.6, (100 * Math.log(v)) / span) : 0;
-      return `<li><button type="button" data-f="${f}" aria-pressed="${f === mixSel}" aria-label="${word(f)}: ${f ? big(v) + " times fewer paths" : "the yardstick"}"><span class="dots">${f ? dots(f) : '<i class="dot P">–</i>'}</span><span class="name">${f ? word(f) : "Plain"}</span><span class="track"><i style="width:${w.toFixed(1)}%"></i></span><span class="x${v < 0.95 ? " worse" : ""}">${f ? (v < 0.95 ? "worse" : big(v) + "×") : "1×"}</span></button></li>`;
+      return `<li><button type="button" data-f="${f}" aria-pressed="${f === mixSel}" aria-label="${word(f)}: ${f ? fx(v) + " fewer paths" : "the yardstick"}"><span class="dots">${f ? dots(f) : '<i class="dot P">–</i>'}</span><span class="name">${f ? word(f) : "Plain"}</span><span class="track"><i style="width:${w.toFixed(1)}%"></i></span><span class="x${v < 0.95 ? " worse" : ""}">${f ? (v < 0.95 ? "worse" : fx(v)) : "1×"}</span></button></li>`;
     }).join("");
     host.addEventListener("click", async (e) => {
       const b = e.target.closest("button[data-f]");
@@ -255,6 +312,7 @@
     board = Board.create($("board"), { gauge: true });
     wireLanding();
     wireDrops();
+    wireToggles();
     await setActive(active);
     onEnter(active);
     if (active === "hero") autoDrop(240); // the hero comes alive once per page load (the board handles reduced motion)

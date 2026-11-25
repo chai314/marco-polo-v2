@@ -144,7 +144,7 @@ const Board = (() => {
     const show = () => ({ pins: true, heap: true, gauge: true, trail: "auto", ...(cfg?.show || {}) });
 
     function fresh() {
-      return { gen: (S?.gen || 0) + 1, cur: null, first: null, loading: null, batchNo: 0, scale: null, active: [], launchQ: [], qi: 0, clock: S?.clock || 0, count: 0, sums: { pay: 0, pay2: 0, st: 0, st2: 0 }, landed: { ln: [], cls: [], alpha: [], bin: [], slot: [], avg: [] }, binCount: null, reserved: null, maxRes: 0, pitch: 0, trays: [0, 0, 0, 0], lanes: new Int32Array(32), dirty: true, drops: [], trails: [], rainTrail: "", chips: [], last: null, needleSettled: true, gaugeDirty: true };
+      return { gen: (S?.gen || 0) + 1, cur: null, first: null, loading: null, batchNo: 0, scale: null, active: [], launchQ: [], qi: 0, clock: S?.clock || 0, count: 0, sums: { pay: 0, pay2: 0, st: 0, st2: 0 }, landed: { ln: [], cls: [], alpha: [], bin: [], slot: [], avg: [], twin: [] }, binCount: null, reserved: null, maxRes: 0, pitch: 0, trays: [0, 0, 0, 0], lanes: new Int32Array(32), dirty: true, drops: [], trails: [], routes: {}, chips: [], last: null, needleSettled: true, gaugeDirty: true };
     }
     S = fresh();
 
@@ -171,7 +171,7 @@ const Board = (() => {
       svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
       if (!cfg) { L = null; paintBoard(); svg.innerHTML = ""; return; }
       const f = flags(), sp = cfg.spec, small = W < 560, r = small ? (f.ring ? 2.2 : 2.4) : 3, pad = small ? 14 : 22, x0 = pad, x1 = W - pad;
-      const gh = opts.gauge && show().gauge !== false ? 104 + (f.C ? 30 : 0) : 0, below = 24 + (f.S ? 38 : 0);
+      const gh = opts.gauge && show().gauge !== false ? 104 + (f.C ? 30 : 0) : 0, below = 38 + (f.S ? 44 : 0);
       const floor = H - gh - (gh ? 8 : 0) - below, pinTop = 42;
       let heapH = Math.max(70, 0.38 * H), pinBot = floor - heapH - 20;
       if (pinBot - pinTop < 90) { heapH = Math.max(60, heapH - (90 - (pinBot - pinTop))); pinBot = floor - heapH - 20; }
@@ -219,6 +219,7 @@ const Board = (() => {
         const tk = ticks(Math.exp(L.lo), Math.exp(L.hi), Math.max(3, Math.round((L.x1 - L.x0) / 90))), dec = decimals(tk.step);
         for (const v of tk.vals) { const x = L.xP(v); if (x < L.x0 - 4 || x > L.x1 + 4) continue; s += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${L.floor + 1}" y2="${L.floor + 5}" stroke="${PIN}" stroke-width="1"/>` + `<text x="${x.toFixed(1)}" y="${L.floor + 19}" font-size="11.5" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`; }
         s += `<text data-r="count" x="${L.x1}" y="${L.heapTop - 5}" font-size="13" font-weight="700" fill="${INK}" text-anchor="end" style="font-variant-numeric:tabular-nums" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">0 balls</text>`;
+        s += `<text x="${L.x1}" y="${L.floor + 34}" font-size="11" fill="${MUTE}" text-anchor="end">price on expiry day (log scale)</text>`;
         // strike and payoff zone label
         s += `<line x1="${L.xK.toFixed(1)}" x2="${L.xK.toFixed(1)}" y1="${L.heapTop}" y2="${L.floor}" stroke="${INK}" stroke-width="1.4"/>`;
         s += T(L.xK + (sp.call ? -6 : 6), L.heapTop - 5, `strike ${fmtP(sp.K)}`, { a: sp.call ? "end" : "start", fill: INK, bold: true });
@@ -259,18 +260,19 @@ const Board = (() => {
       // lanes
       if (f.S && b) {
         for (let h = 1; h < 32; h++) { const x = L.ax + L.bx * b.sorted[Math.floor((NP * h) / 32)]; s += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${L.floor - 7}" y2="${L.floor + 1}" stroke="${GREEN}" stroke-width="1.5"/>`; }
-        s += `<g data-r="lanes"></g><text x="${L.x0}" y="${L.floor + 52}" font-size="11.5" fill="${GREEN_D}">32 lanes, equally likely</text>`;
+        s += `<g data-r="lanes"></g><text x="${L.x0}" y="${L.floor + 66}" font-size="11.5" fill="${GREEN_D}">32 lanes, equally likely</text>`;
       }
       if (f.ring) s += `<path data-r="curve" fill="none" stroke="${VIOLET}" stroke-width="1.6"/><text data-r="curveLabel" font-size="11.5" fill="${VIOLET}" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text>`;
       // moving parts
-      s += `<g data-r="trails"><path data-r="rain" fill="none" stroke="${INK}" stroke-width="1" stroke-opacity=".05" stroke-linejoin="round"/></g><g data-r="notch"></g><g data-r="chips"></g>`;
+      s += `<g data-r="routes"></g><g data-r="trails"></g><g data-r="notch"></g><g data-r="chips"></g>`;
       if (L.gh) s += gaugeSvg(T);
       svg.innerHTML = s;
       R = {};
       svg.querySelectorAll("[data-r]").forEach((e) => { R[e.dataset.r] = e; });
       R.trailEls = [];
       for (const t of S.trails) mountTrail(t);
-      if (S.rainTrail) R.rain.setAttribute("d", S.rainTrail);
+      R.routeEls = {};
+      for (const k in S.routes) setRoute(k);
       for (const c of S.chips) R.chips.appendChild(c);
       updateDynamic(true);
     }
@@ -308,15 +310,15 @@ const Board = (() => {
       if (sh.heap === false) return;
       const d = S.landed, f = L.f, groups = new Map(), asianTicks = sp.product === "asian" ? new Path2D() : null;
       for (let i = 0; i < d.ln.length; i++) {
-        const x = L.x0 + (d.bin[i] + 0.5) * L.bw, y = slotY(d.slot[i]), kk = d.cls[i] * 16 + Math.round(d.alpha[i] * 8);
+        const x = L.x0 + (d.bin[i] + 0.5) * L.bw, y = slotY(d.slot[i]), kk = d.cls[i] * 16 + Math.round(d.alpha[i] * 8) + (d.twin[i] ? 32 : 0);
         let g = groups.get(kk);
         if (!g) groups.set(kk, (g = new Path2D()));
         g.moveTo(x + L.r, y); g.arc(x, y, L.r, 0, 6.2832);
         if (asianTicks) { const ax = L.ax + L.bx * d.avg[i]; asianTicks.moveTo(ax + 1.8, L.floor + 6); asianTicks.arc(ax, L.floor + 6, 1.8, 0, 6.2832); }
       }
       for (const [kk, g] of groups) {
-        const cls = kk >> 4, a = (kk & 15) / 8, col = cls ? (f.ring ? VIOLET : INK) : f.ring ? VIOLET : PALE;
-        if (f.ring) { bctx.globalAlpha = cls ? 1 : 0.4; bctx.strokeStyle = col; bctx.lineWidth = L.small ? 1 : 1.2; bctx.stroke(g); } else { bctx.globalAlpha = a; bctx.fillStyle = col; bctx.fill(g); }
+        const cls = (kk >> 4) & 1, a = (kk & 15) / 8, col = cls ? (f.ring ? VIOLET : INK) : f.ring ? VIOLET : PALE;
+        if (f.ring) { bctx.globalAlpha = cls ? 1 : 0.4; bctx.strokeStyle = col; bctx.lineWidth = L.small ? 1 : 1.2; bctx.stroke(g); } else { bctx.globalAlpha = a; bctx.fillStyle = col; bctx.fill(g); if (kk & 32) { bctx.globalAlpha = 1; bctx.strokeStyle = BLUE; bctx.lineWidth = 1; bctx.stroke(g); } }
       }
       bctx.globalAlpha = 1;
       if (asianTicks) { bctx.strokeStyle = "rgba(20,23,26,.35)"; bctx.lineWidth = 1; bctx.stroke(asianTicks); }
@@ -344,8 +346,20 @@ const Board = (() => {
     }
 
     // ------------------------------------------------------------ balls
+    const ROUTE = { i05: [INK, 0.05, 1], b25: [BLUE, 0.25, 1.4], i12: [INK, 0.12, 1], b12: [BLUE, 0.12, 1] };
+    function setRoute(k) {
+      let e = R.routeEls[k];
+      if (!e) { const [c, o, w] = ROUTE[k]; e = R.routeEls[k] = el("path", { fill: "none", stroke: c, "stroke-opacity": o, "stroke-width": w, "stroke-linejoin": "round" }); R.routes.appendChild(e); }
+      e.setAttribute("d", S.routes[k]);
+    }
+    function addRoute(k, ball) { // the route down to the last pin row (or to where the ball stopped)
+      const p = polyline(ball.b, ball).pts, end = ball.fate === 0 ? p.length - 2 : p.length;
+      let d = "";
+      for (let j = 2; j < end; j += 2) d += (j > 2 ? "L" : "M") + p[j].toFixed(1) + " " + p[j + 1].toFixed(1);
+      S.routes[k] = (S.routes[k] || "") + d; setRoute(k);
+    }
     function mountTrail(t) {
-      t.el = el("path", { fill: "none", stroke: t.color, "stroke-width": "1.2", "stroke-linejoin": "round", "stroke-linecap": "round" });
+      t.el = el("path", { fill: "none", stroke: t.color, "stroke-width": t.w || 1.2, "stroke-opacity": t.op || 1, "stroke-linejoin": "round", "stroke-linecap": "round" });
       if (t.d) t.el.setAttribute("d", t.d);
       R.trails.appendChild(t.el);
       if (t.jumps?.length) { t.notchEl = el("path", { fill: "none", stroke: VIOLET, "stroke-width": "2.2" }); R.notch.appendChild(t.notchEl); }
@@ -394,7 +408,7 @@ const Board = (() => {
       ball.stopU = ball.fate === 0 ? 1 : clamp(((yStopFall - 34) / span) ** (1 / 1.35), 0.02, 1);
       ball.span = span; ball.phase = 0; ball.dur = ball.dur0;
       if (ball.trail) { const t = ball.trail; const r = polyline(ball.b, ball); t.pts = r.pts; t.jumps = r.jumps; ball.t = t; S.trails.push(t); mountTrail(t); }
-      else if (ball.faint) { const p = polyline(ball.b, ball).pts, end = ball.fate === 0 ? p.length - 2 : p.length; let d = ""; for (let k = 2; k < end; k += 2) d += (k > 2 ? "L" : "M") + p[k].toFixed(1) + " " + p[k + 1].toFixed(1); S.rainTrail += d; R.rain?.setAttribute("d", S.rainTrail); }
+      else if (ball.faint) addRoute(ball.pair ? "b25" : "i05", ball);
       S.active.push(ball);
     }
     function place(ball, u) { // position of a falling ball at time fraction u
@@ -434,18 +448,25 @@ const Board = (() => {
       S.count++; S.sums.pay += pv; S.sums.pay2 += pv * pv; S.sums.st += st; S.sums.st2 += st * st;
       if (ball.fate === 0) {
         const d = S.landed;
-        d.ln.push(b.heap[i]); d.cls.push(ball.cls); d.alpha.push(ball.alpha); d.bin.push(ball.bin); d.slot.push(S.binCount[ball.bin]++); d.avg.push(b.avgLn[i]);
+        d.ln.push(b.heap[i]); d.cls.push(ball.cls); d.alpha.push(ball.alpha); d.bin.push(ball.bin); d.slot.push(S.binCount[ball.bin]++); d.avg.push(b.avgLn[i]); d.twin.push(ball.twin ? 1 : 0);
         let lo = 0, hi = 31; // lane of this ball among the 32 equally likely ones
         const e = b.end[i];
         while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (e >= b.sorted[Math.floor((NP * mid) / 32)]) lo = mid; else hi = mid - 1; }
         S.lanes[lo]++;
       } else S.trays[L.f.kind]++;
+      if (ball.keep) addRoute(ball.pair ? "b12" : "i12", ball);
       S.dirty = true; S.gaugeDirty = true; ariaDirty = true;
       S.last = { count: S.count, ST: sp.S0 * Math.exp(b.end[i]), payoff: ball.pay };
       S.landedFrame = true;
       if (ball.chip && R.chips) {
-        const tr = L.tray, side = ball.fate ? tr.side : ball.x > W - 90 ? "right" : "left", cx = ball.fate ? (side === "left" ? tr.x + tr.w + 8 : tr.x - 8) : ball.x + (side === "right" ? -9 : 9), cy = ball.fate ? tr.y + 24 : ball.y - 9;
-        const txt = el("text", { x: cx, y: cy, "font-size": "12", "font-weight": "700", fill: INK, "text-anchor": side === "right" ? "end" : "start", stroke: "#fff", "stroke-width": "3", "paint-order": "stroke", "stroke-linejoin": "round" });
+        const tr = L.tray;
+        let cx, cy, anchor = "middle";
+        if (ball.fate) { const left = tr.side === "left"; cx = left ? tr.x + tr.w + 8 : tr.x - 8; cy = tr.y + 24; anchor = left ? "start" : "end"; }
+        else {
+          const top = slotY(ball.slot) - L.r; cx = clamp(ball.xBin, 44, W - 44); cy = top - 9;
+          if (cy < L.heapTop + 12) { const right = ball.bin < L.nb / 2; cx = clamp(ball.xBin + (right ? 12 : -12), 10, W - 10); cy = L.heapTop + 16; anchor = right ? "start" : "end"; }
+        }
+        const txt = el("text", { x: cx, y: cy, "font-size": "12", "font-weight": "700", fill: INK, "text-anchor": anchor, stroke: "#fff", "stroke-width": "3", "paint-order": "stroke", "stroke-linejoin": "round" });
         txt.style.transition = "opacity .5s"; txt.textContent = "pays " + (ball.pay > 0 ? ball.pay.toFixed(2) : "0");
         R.chips.appendChild(txt); S.chips.push(txt);
         setTimeout(() => { txt.style.opacity = "0"; }, 2000);
@@ -487,6 +508,7 @@ const Board = (() => {
     const sdOf = (s, s2, n) => (n > 1 ? Math.sqrt(Math.max(0, (s2 - (s * s) / n) / (n - 1))) : NaN);
     function gaugeTarget() {
       const exact = cfg.exact, lastSe = trace?.length ? trace[trace.length - 1][2] : NaN, plainSe = sdOf(S.sums.pay, S.sums.pay2, S.count) / Math.sqrt(S.count);
+      if (cfg.gaugeRange) return { center: (cfg.gaugeRange[0] + cfg.gaugeRange[1]) / 2, half: (cfg.gaugeRange[1] - cfg.gaugeRange[0]) / 2, fixed: true };
       const center = Number.isFinite(exact) ? exact : Number.isFinite(meanPay()) ? meanPay() : 1;
       let half = Math.max(Number.isFinite(plainSe) ? 3.5 * plainSe : 0, Number.isFinite(lastSe) ? 4 * lastSe : 0);
       if (!(half > 0)) half = Math.max(Math.abs(center) * 0.35, 0.05);
@@ -494,17 +516,18 @@ const Board = (() => {
     }
     function updateGauge(dt, force) {
       if (!L?.gh || !R.needle) return;
-      const sp = cfg.spec, { center, half } = gaugeTarget(), gx0 = L.gx0, gx1 = L.x1, y0 = L.gy, ay = y0 + 70;
-      if (!Number.isFinite(G.range) || force && !S.count) G.range = half;
+      const sp = cfg.spec, { center, half, fixed } = gaugeTarget(), gx0 = L.gx0, gx1 = L.x1, y0 = L.gy, ay = y0 + 70;
+      if (!Number.isFinite(G.range) || force && !S.count || fixed) G.range = half;
+      else if (fixed) G.range = half;
       else G.range += (half - G.range) * (1 - Math.exp(-dt / 140));
       const rng = G.range, px = (v) => clamp(gx0 + ((v - (center - rng)) / (2 * rng)) * (gx1 - gx0), gx0 + 3, gx1 - 3);
       // ticks
       const tk = ticks(center - rng, center + rng, 4), dec = decimals(tk.step);
       const sig = tk.vals.map((v) => v.toFixed(dec)).join("|");
-      if (sig !== G.sig) { G.sig = sig; R.axisTicks.innerHTML = tk.vals.map((v) => `<line x1="${px(v).toFixed(1)}" x2="${px(v).toFixed(1)}" y1="${ay + 1}" y2="${ay + 6}" stroke="${RULE}"/><text x="${px(v).toFixed(1)}" y="${ay + 20}" font-size="11.5" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`).join(""); }
+      if (sig !== G.sig) { G.sig = sig; R.axisTicks.innerHTML = tk.vals.map((v) => `<line x1="${px(v).toFixed(1)}" x2="${px(v).toFixed(1)}" y1="${ay + 1}" y2="${ay + 6}" stroke="${RULE}"/><text x="${px(v).toFixed(1)}" y="${ay + 27}" font-size="11.5" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`).join(""); }
       R.exactLabel.innerHTML = Number.isFinite(cfg.exact) ? `true price <tspan font-weight="700">${cfg.exact.toFixed(2)}</tspan>` : "true price";
       const mx = (gx0 + gx1) / 2;
-      R.band.setAttribute("x", mx - 4);
+      R.band.setAttribute("x", (Number.isFinite(cfg.exact) ? px(cfg.exact) : mx) - 4);
       let tv = traceAt(trace, S.count);
       if (!Number.isFinite(tv)) tv = meanPay();
       R.value.textContent = Number.isFinite(tv) && S.count ? tv.toFixed(2) : "\u2013";
@@ -536,10 +559,10 @@ const Board = (() => {
           R.stockNeedle.setAttribute("transform", `translate(${sn.toFixed(2)} 0)`); R.stockNeedle.setAttribute("opacity", "1");
           const pm = Number.isFinite(meanPay()) ? px(meanPay()) : NaN, ar = R.arrow;
           if (Number.isFinite(pm) && Number.isFinite(G.needle) && Math.abs(pm - G.needle) > 6) {
-            const ay2 = y0 + 77, dir = Math.sign(G.needle - pm);
+            const ay2 = y0 + 82, dir = Math.sign(G.needle - pm);
             const ln = ar.firstChild; ln.setAttribute("x1", pm); ln.setAttribute("x2", G.needle - dir * 6); ln.setAttribute("y1", ay2); ln.setAttribute("y2", ay2);
             ar.childNodes[1].setAttribute("d", `M${G.needle} ${ay2} L${G.needle - dir * 8} ${ay2 - 4} L${G.needle - dir * 8} ${ay2 + 4} Z`);
-            const t = ar.childNodes[2], lft = Math.min(pm, G.needle) > gx0 + 90; t.setAttribute("text-anchor", lft ? "end" : "start"); t.setAttribute("x", lft ? Math.min(pm, G.needle) - 6 : Math.max(pm, G.needle) + 12); t.setAttribute("y", ay2 + 4);
+            const t = ar.childNodes[2], lft = Math.min(pm, G.needle) > gx0 + 90; t.setAttribute("text-anchor", "middle"); t.setAttribute("x", ((pm + G.needle) / 2).toFixed(1)); t.setAttribute("y", ay2 - 5);
             ar.setAttribute("opacity", "1");
           } else ar.setAttribute("opacity", "0");
           const stk = R.stockTicks; if (!stk.firstChild) stk.appendChild(el("text", { x: gx1, y: L.gy - 30 + 12, "font-size": "11.5", fill: ORANGE_D, "text-anchor": "end" }));
@@ -559,9 +582,9 @@ const Board = (() => {
         let s = "";
         if (b) for (let h = 0; h < 32; h++) {
           const xa = h ? L.ax + L.bx * b.sorted[Math.floor((NP * h) / 32)] : L.x0, xb = h < 31 ? L.ax + L.bx * b.sorted[Math.floor((NP * (h + 1)) / 32)] : L.x1, hh = total ? Math.min(9, (S.lanes[h] / (total / 32)) * 6) : 0;
-          s += `<rect x="${(xa + 0.5).toFixed(1)}" y="${(L.floor + 36 - hh).toFixed(1)}" width="${Math.max(0.5, xb - xa - 1).toFixed(1)}" height="${hh.toFixed(1)}" fill="${GREEN}"/>`;
+          s += `<rect x="${(xa + 0.5).toFixed(1)}" y="${(L.floor + 50 - hh).toFixed(1)}" width="${Math.max(0.5, xb - xa - 1).toFixed(1)}" height="${hh.toFixed(1)}" fill="${GREEN}"/>`;
         }
-        s += `<line x1="${L.x0}" x2="${L.x1}" y1="${L.floor + 36.5}" y2="${L.floor + 36.5}" stroke="${GREEN}" stroke-width=".5"/>`;
+        s += `<line x1="${L.x0}" x2="${L.x1}" y1="${L.floor + 50.5}" y2="${L.floor + 50.5}" stroke="${GREEN}" stroke-width=".5"/>`;
         R.lanes.innerHTML = s;
       }
       if (f.ring && R.curve && cfg.spec.product === "merton") {
@@ -577,8 +600,16 @@ const Board = (() => {
           if (h > peak) { peak = h; peakX = x; }
         }
         R.curve.setAttribute("d", pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(""));
-        const lx = Math.min(L.x1 - 120, peakX + (L.small ? 40 : 90)), q = pts.reduce((a, p) => (Math.abs(p[0] - lx) < Math.abs(a[0] - lx) ? p : a), pts[0]);
-        R.curveLabel.setAttribute("x", lx); R.curveLabel.setAttribute("y", Math.min(q[1] - 8, L.floor - 8)); R.curveLabel.textContent = "the formula fills this in";
+        const topAt = (xa, xb) => { // highest ball or curve point between two x positions
+          let t = L.floor;
+          for (const q of pts) if (q[0] >= xa && q[0] <= xb) t = Math.min(t, q[1]);
+          for (let bb = Math.max(0, Math.floor((xa - L.x0) / L.bw)); bb <= Math.min(L.nb - 1, Math.floor((xb - L.x0) / L.bw)); bb++) if (S.reserved[bb]) t = Math.min(t, slotY(S.reserved[bb] - 1) - L.r);
+          return t;
+        };
+        const lw = 140, ax0 = clamp(peakX - lw / 2, L.x0, L.x1 - lw), yA = topAt(ax0, ax0 + lw) - 9;
+        let lx = ax0, ly = yA;
+        if (yA < L.heapTop + 12) { const yB = topAt(L.x0, L.x0 + lw) - 9; lx = L.x0; ly = Math.max(yB, L.heapTop + 12); }
+        R.curveLabel.setAttribute("x", lx); R.curveLabel.setAttribute("y", ly); R.curveLabel.textContent = "the formula fills this in";
       }
     }
 
@@ -650,14 +681,14 @@ const Board = (() => {
         if (!picks || gen !== S.gen || destroyed) return;
         for (const t of S.trails) t.el?.remove();
         S.trails = []; R.notch && (R.notch.innerHTML = ""); R.chips && (R.chips.innerHTML = ""); S.chips = [];
-        S.rainTrail = ""; R.rain?.setAttribute("d", "");
+        S.routes = {}; R.routes && (R.routes.innerHTML = ""); R.routeEls = {};
         return new Promise((res) => {
           const dr = { left: picks.length, res }, f = L.f, one = pace === "one", span = Math.min(3000, 250 + n * 1.2), balls = [];
-          const dur = one ? 1900 : 1400, faint = !one && n <= 64;
+          const dur = one ? 1900 : 1400;
           picks.forEach(([b, i], k) => {
             const pair = f.A && b.anti;
             const slot = one ? (pair ? Math.floor(k / 2) * 2000 : k * 2000) : pair ? Math.floor(k / 2) * (span / (n / 2)) : (k * span) / n;
-            const ball = { b, i, t0: S.clock + slot, dur0: dur, one, blue: one && pair, drop: dr, chip: one, faint, trail: one ? { color: pair ? BLUE : INK } : null, phase: -1 };
+            const ball = { b, i, t0: S.clock + slot, dur0: dur, one, pair, twin: pair, blue: one && pair, drop: dr, chip: one, faint: !one && ((pair && k < 64) || (!pair && n <= 64)), keep: !one && k >= n - 24, trail: one ? { color: pair ? BLUE : INK, w: pair ? 1.4 : 1.2, op: pair ? 0.8 : 1 } : null, phase: -1 };
             balls.push(ball);
           });
           if (still) {
