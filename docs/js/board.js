@@ -281,9 +281,10 @@ const Board = (() => {
       const y0 = L.gy, f = L.f, x0 = L.x0, x1 = L.x1, yc = y0 - (f.C ? 30 : 0), g0 = L.gx0, ay = y0 + 70;
       let s = "";
       if (f.C) s += `<text x="${x0}" y="${yc + 12}" font-size="11.5" fill="${MUTE}">stock, average so far</text><line x1="${g0}" x2="${x1}" y1="${yc + 20}" y2="${yc + 20}" stroke="${RULE}"/><g data-r="stockTicks"></g><line data-r="stockKnown" y1="${yc + 12}" y2="${yc + 28}" stroke="${INK}" stroke-width="1.6"/><g data-r="stockNeedle" opacity="0"><line y1="${yc + 11}" y2="${yc + 29}" stroke="${ORANGE}" stroke-width="2.4"/></g>`;
-      s += `<text x="${x0}" y="${y0 + 16}" font-size="12" fill="${MUTE}">Average payoff so far</text>`;
-      s += `<text data-r="value" x="${x0}" y="${y0 + 50}" font-size="28" font-weight="700" fill="${INK}" style="font-variant-numeric:tabular-nums">\u2013</text>`;
-      s += `<rect x="${x0}" y="${y0 + 62}" width="10" height="10" fill="${YELLOW}"/><text data-r="exactLabel" x="${x0 + 16}" y="${y0 + 71.5}" font-size="12.5" fill="${INK}"></text>`;
+      s += `<text data-r="gLabel" x="${x0}" y="${y0 + 16}" font-size="12" fill="${MUTE}">Average payoff so far</text>`;
+      s += `<text data-r="value" x="${x0}" y="${y0 + 46}" font-size="28" font-weight="700" fill="${INK}" style="font-variant-numeric:tabular-nums">\u2013</text>`;
+      s += `<text data-r="gNote" x="${x0}" y="${y0 + 59}" font-size="11" fill="${MUTE}"></text>`;
+      s += `<rect x="${x0}" y="${y0 + 66}" width="10" height="10" fill="${YELLOW}"/><text data-r="exactLabel" x="${x0 + 16}" y="${y0 + 75.5}" font-size="12.5" fill="${INK}"></text>`;
       s += `<line x1="${g0}" x2="${x1}" y1="${ay + 0.5}" y2="${ay + 0.5}" stroke="${RULE}" stroke-width="1"/><g data-r="axisTicks"></g>`;
       s += `<rect data-r="band" x="${(g0 + x1) / 2 - 4}" y="${ay - 30}" width="8" height="30" fill="${YELLOW}"/>`;
       s += `<g data-r="ghosts"></g>`;
@@ -528,7 +529,10 @@ const Board = (() => {
       R.exactLabel.innerHTML = Number.isFinite(cfg.exact) ? `true price <tspan font-weight="700">${cfg.exact.toFixed(2)}</tspan>` : "true price";
       const mx = (gx0 + gx1) / 2;
       R.band.setAttribute("x", (Number.isFinite(cfg.exact) ? px(cfg.exact) : mx) - 4);
-      let tv = traceAt(trace, S.count);
+      const plain = !cfg.sel, letters = ["A", "C", "S", "K"].filter((l) => L.f[l]).join("+");
+      R.gLabel.textContent = plain || !letters ? "Average payoff so far" : `Estimate with ${letters} so far`;
+      R.gNote.textContent = plain || !letters ? "" : "the engine\u2019s own estimate at this many balls";
+      let tv = plain ? meanPay() : traceAt(trace, S.count);
       if (!Number.isFinite(tv)) tv = meanPay();
       R.value.textContent = Number.isFinite(tv) && S.count ? tv.toFixed(2) : "\u2013";
       let target = Number.isFinite(tv) ? px(tv) : NaN, moving = false;
