@@ -12,7 +12,45 @@ const Views = (() => {
   const path = (pts) => pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join("");
   const fmt = (v, d) => minus(v.toFixed(d));
   const isFlat = (p) => p === "european" || p === "merton";
-  const show = (on) => { document.getElementById("sheet").hidden = on !== "sheet"; svg().style.display = on === "sheet" ? "none" : ""; };
+  const show = (on) => {
+    document.getElementById("sheet").hidden = on !== "sheet";
+    document.getElementById("lab-board").hidden = on !== "board";
+    svg().style.display = on === "plot" ? "" : "none";
+  };
+
+  // ------------------------------------------------------------------ board (the Galton board)
+  let galton = null;
+  const BOARD_NOTE = { barrier: " Balls that touch the red wall are knocked out.", american: " Balls that cross the dashed line are exercised early.", asian: " Each ball is heaped by its average price, which is what this option pays on." };
+  async function board(ctx) {
+    show("board");
+    Ink.clear();
+    ctx.wait("");
+    const { spec, sel, base, ref } = ctx, host = document.getElementById("lab-board");
+    if (!galton) galton = Board.create(host, { gauge: true });
+    galton.set({ spec, sel, seed: base.seed, exact: ref, strata: base.strata });
+    ctx.tools(`<button type="button" class="tool" id="t-drop1">Drop 1</button><button type="button" class="tool" id="t-drop1k">Drop 1,000</button><button type="button" class="tool" id="t-clear">Clear</button>`);
+    const run = (n) => galton.drop(n).catch(() => {});
+    document.getElementById("t-drop1").onclick = () => run(1);
+    document.getElementById("t-drop1k").onclick = () => run(1000);
+    document.getElementById("t-clear").onclick = () => galton.clear();
+    ctx.caption("Each ball is one simulated future. The needle is the engine’s estimate after that many balls; the yellow band is the true price. Switch tricks on the right and drop again." + (BOARD_NOTE[spec.product] || ""));
+    const trace = (f) => {
+      const key = JSON.stringify(["board", spec, base.n, base.seed, base.strata, f]);
+      if (!ctx.cache.has(key)) {
+        const p = Engine.call("race", { spec, flags: f, n: base.n, strata: base.strata, seed: base.seed, points: 64 });
+        p.catch(() => ctx.cache.delete(key));
+        ctx.cache.set(key, p);
+        if (ctx.cache.size > 40) ctx.cache.delete(ctx.cache.keys().next().value);
+      }
+      return ctx.cache.get(key);
+    };
+    try {
+      const [mine, plain] = await Promise.all([trace(sel), sel ? trace(0) : null]);
+      if (!ctx.alive()) return;
+      galton.setTrace(mine, word(sel));
+      galton.setCompare(sel ? plain : null);
+    } catch (e) { if (e.message !== "stale") throw e; }
+  }
 
   // ------------------------------------------------------------------ convergence
   let zoom = false, shift = 0;
@@ -310,5 +348,5 @@ const Views = (() => {
     ctx.caption("");
   }
 
-  return { race, paths, market, notes };
+  return { board, race, paths, market, notes };
 })();

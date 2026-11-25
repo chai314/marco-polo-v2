@@ -3,26 +3,117 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Marco Polo · variance reduction, measured</title>
-<meta name="description" content="Four variance-reduction methods for Monte Carlo option pricing, in every combination, measured at equal cost against exact prices. A C++ engine running in your browser.">
+<title>Marco Polo · price an option by dropping balls</title>
+<meta name="description" content="A playful lab: price an option by dropping thousands of balls through a Galton board, then learn four tricks that get the same answer with far fewer balls. A C++ engine running live in your browser.">
 <meta name="theme-color" content="#14171a">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314171a'/%3E%3Cpath d='M5 24C10 24 12 8 16 8s6 16 11 16' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top">
-  <div class="brand">
-    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 24C10 24 12 8 16 8s6 16 11 16"/></svg>
-    <h1>Marco Polo</h1>
-    <p class="tag">Variance reduction, measured in your browser</p>
-  </div>
-  <div class="products" role="tablist" aria-label="Product">
-    <button type="button" role="tab" data-product="european">European</button><button type="button" role="tab" data-product="asian">Asian</button><button type="button" role="tab" data-product="barrier">Barrier</button><button type="button" role="tab" data-product="american">American</button>
-  </div>
+  <a class="brand" href="#story" aria-label="Marco Polo, back to the start">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="7" r="3"/><circle cx="10" cy="16" r="3"/><circle cx="22" cy="16" r="3"/><circle cx="4" cy="25" r="3"/><circle cx="16" cy="25" r="3"/><circle cx="28" cy="25" r="3"/></svg>
+    <span class="wm">Marco Polo</span>
+  </a>
+  <nav class="jump" aria-label="Sections"><a href="#story">The story</a><a href="#lab">The lab</a></nav>
   <p id="status" class="status" aria-live="polite"><span class="pulse" aria-hidden="true"></span><span id="status-text">Starting the engine</span></p>
 </header>
 
+<main class="story" id="story">
+  <div class="exhibit" aria-label="The board">
+    <div id="board" class="board"></div>
+  </div>
+  <div class="steps">
+    <section class="step hero" data-step="hero" aria-labelledby="h-hero">
+      <h1 id="h-hero">Price an option by dropping balls</h1>
+      <p class="lead">Nobody knows where a stock will be in six months. So we imagine thousands of possible futures, check what the option pays in each one, and take the average. That average is the price.</p>
+      <p>This little lab shows how that works. Then it shows four tricks that get the same answer with far fewer balls.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="1"><span>Drop a ball</span></button><a class="skip" href="#lab">Skip to the lab</a></div>
+      <p class="note">Everything here runs live in your browser on a C++ engine. Nothing is a recording.</p>
+    </section>
+
+    <section class="step" data-step="one" aria-labelledby="h-one">
+      <h2 id="h-one">One ball, one future</h2>
+      <p>The ball starts at today’s price of <b data-live="ticker">SPY</b>, <b data-live="S0">718.78</b>. Each row of pins is a step forward in time. At every step the ball gets a random nudge, left or right, big or small. Where it lands is the stock price on expiry day, <b data-live="T">half a year</b> from now.</p>
+      <p>Our option is a <b>call</b> with a strike of <b data-live="K">719</b>. It pays whatever the price ends above <b data-live="K">719</b>. If the price ends below, it pays nothing.</p>
+      <p class="readout" data-live="lastBall">Drop a ball to see what it pays.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="1"><span>Drop another</span></button></div>
+    </section>
+
+    <section class="step" data-step="many" aria-labelledby="h-many">
+      <h2 id="h-many">Many balls, one calm average</h2>
+      <p>One ball is a wild guess. The average of many balls is calm. The needle under the board shows the average payoff so far.</p>
+      <p>The yellow band is the true price, <b data-live="exact">47.30</b>, from the Black–Scholes formula. We only use it to check our work. The balls never see it.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
+      <p class="readout">With <b data-live="N">2,000</b> balls the needle usually stops within <span class="pm" data-live="err:0">±2.4</span> of the truth. “Usually” means 19 times out of 20.</p>
+    </section>
+
+    <section class="step" data-step="cost" aria-labelledby="h-cost">
+      <h2 id="h-cost">The catch: four times the balls, half the error</h2>
+      <p>The error shrinks with the square root of the number of balls. Four times the balls only halves it. One more correct digit costs a hundred times the balls.</p>
+      <p>Try it. Each dot below is a whole experiment. Watch how slowly the cloud of answers tightens.</p>
+      <div class="cloud-wrap">
+        <div class="seg" role="radiogroup" aria-label="Balls in each experiment"><button type="button" role="radio" data-act="cloud" data-n="500">500</button><button type="button" role="radio" data-act="cloud" data-n="2000">2,000</button><button type="button" role="radio" data-act="cloud" data-n="8000">8,000</button><button type="button" role="radio" data-act="cloud" data-n="32000">32,000</button></div>
+        <div id="cloud" class="cloud" aria-live="polite"></div>
+      </div>
+      <p>So let’s cheat, legally. Each trick below keeps the answer right on average. It just makes every experiment less wild. We always compare at the same number of balls, and if a trick costs extra work, we count that too.</p>
+    </section>
+
+    <section class="step trick" data-step="A" style="--c:var(--A)" aria-labelledby="h-A">
+      <h2 id="h-A"><i class="disc">A</i>Trick A: mirror twins</h2>
+      <p>For every ball, we drop a twin that gets the opposite nudge at every pin. When one flies far right, the other flies far left.</p>
+      <p>For a call, one twin often pays a lot while the other pays little. Their average swings much less than the average of two strangers.</p>
+      <p class="aside">This works when the payoff only moves one way as the price rises, as it does for a call or a put. Each twin costs a full ball, and we count it.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2"><span>Drop a pair</span></button><button type="button" class="press ghost" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
+      <p class="readout" data-live="trick:A"></p>
+    </section>
+
+    <section class="step trick" data-step="S" style="--c:var(--S)" aria-labelledby="h-S">
+      <h2 id="h-S"><i class="disc">S</i>Trick S: a fair share for every lane</h2>
+      <p>Random balls bunch up by luck: too many in one spot, too few in another. So we cut the landing zone into 32 lanes that are all equally likely, and send exactly the same number of balls down each one.</p>
+      <p>The luck of which lane a ball picks is gone. Only the luck inside each lane is left.</p>
+      <p class="aside">Under the hood, we fix where each path is headed overall, then fill in the day-to-day wiggles at random.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
+      <p class="readout" data-live="trick:S"></p>
+    </section>
+
+    <section class="step trick" data-step="C" style="--c:var(--C)" aria-labelledby="h-C">
+      <h2 id="h-C"><i class="disc">C</i>Trick C: check against an answer key</h2>
+      <p>There is one thing we know exactly: the average final price of the stock itself. So we track it on the same balls.</p>
+      <p>If the balls happen to land too high, the stock average comes out too high. The option estimate is then probably too high as well. We know the stock’s mistake exactly, so we subtract a matching share of it from the option.</p>
+      <p class="aside">That share is called β. We learn it from a small separate trial run, so the trick never tilts the answer.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
+      <p class="readout" data-live="trick:C"></p>
+    </section>
+
+    <section class="step trick" data-step="K" style="--c:var(--K)" aria-labelledby="h-K">
+      <h2 id="h-K"><i class="disc">K</i>Trick K: skip the dice a formula can roll for you</h2>
+      <p>Now let the stock jump. About <b data-live="lam">0.43</b> times a year, it drops suddenly, by <b data-live="muJ">28%</b> on a typical jump. The market’s option prices tell us to expect this.</p>
+      <p>Here is the trick. Once we know how many jumps happen, the rest of the path is smooth, and a formula prices it exactly. So we roll dice only for the number of jumps. The formula does the rest.</p>
+      <p class="aside">For barrier options, K works differently. Instead of checking whether a ball touched the barrier, we compute the chance that it brushed it between two rows of pins.</p>
+      <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Drop 2,000</span></button></div>
+      <p class="readout" data-live="trick:K"></p>
+    </section>
+
+    <section class="step" data-step="mix" aria-labelledby="h-mix">
+      <h2 id="h-mix">Mix the tricks</h2>
+      <p>Tricks can be combined. Sometimes their gains multiply. Sometimes they fight over the same noise: S and C both go after where the ball ends up, so together they are not twice as good.</p>
+      <p>Here are all 15 combinations for the jumping stock, each with the same budget. Tap one to bolt it onto the board.</p>
+      <ol id="story-rank" class="story-rank"></ol>
+      <div class="acts"><a class="press" href="#lab"><span>Open the lab</span></a></div>
+    </section>
+  </div>
+</main>
+
+<section id="lab" class="lab" aria-labelledby="h-lab">
+  <header class="lab-head">
+    <h2 id="h-lab">The lab</h2>
+    <p>Every option, every stock, every trick. Change anything and everything reprices live. Drag a field’s name sideways to scrub its number.</p>
+  </header>
 <form id="form" class="sheet" autocomplete="off" aria-label="Contract and budget" novalidate>
+  <div class="products" role="tablist" aria-label="Product">
+    <button type="button" role="tab" data-product="european">European</button><button type="button" role="tab" data-product="asian">Asian</button><button type="button" role="tab" data-product="barrier">Barrier</button><button type="button" role="tab" data-product="american">American</button>
+  </div>
   <button type="button" id="b-sheet" class="summary" aria-expanded="false" aria-controls="fields"><span id="summary">Contract</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg></button>
   <div class="fields" id="fields">
     <fieldset class="group">
@@ -62,16 +153,16 @@
   </div>
   <p id="error" class="error" role="alert" hidden></p>
 </form>
-
-<main class="work">
+<div class="work">
   <section class="plot" aria-label="Evidence">
     <div class="bar">
       <div class="views" role="tablist" aria-label="Views">
-        <button type="button" role="tab" data-view="race">Convergence<kbd>1</kbd></button><button type="button" role="tab" data-view="paths">Paths<kbd>2</kbd></button><button type="button" role="tab" data-view="market">Market<kbd>3</kbd></button><button type="button" role="tab" data-view="notes">Method<kbd>4</kbd></button>
+        <button type="button" role="tab" data-view="board">Board<kbd>1</kbd></button><button type="button" role="tab" data-view="race">Convergence<kbd>2</kbd></button><button type="button" role="tab" data-view="paths">Paths<kbd>3</kbd></button><button type="button" role="tab" data-view="market">Market<kbd>4</kbd></button><button type="button" role="tab" data-view="notes">Method<kbd>5</kbd></button>
       </div>
       <div id="tools" class="tools"></div>
     </div>
     <div id="stage" class="stage">
+      <div id="lab-board" class="lab-board" hidden></div>
       <svg id="marks" class="marks"></svg>
       <div id="sheet" class="reading" hidden></div>
       <p id="wait" class="wait" hidden></p>
@@ -92,7 +183,21 @@
     </div>
     <p id="caveat" class="caveat" hidden></p>
   </aside>
-</main>
+</div>
+  <aside class="fine" aria-labelledby="h-fine">
+    <h2 id="h-fine">The fine print, in plain words</h2>
+    <ul>
+      <li><b>Balls are the engine’s real paths.</b> The board draws paths from the same random-number generator the engine uses. The needle and every error bar come from the engine’s own estimates, not from the animation.</li>
+      <li><b>Error bars can be too small.</b> When the spread we actually see across repeated runs is clearly bigger than the error a run reports about itself, we use the bigger one and say so. This happens with rare jumps: a short run may see none.</li>
+      <li><b>Two estimators lean slightly.</b> American options (priced by Longstaff–Schwartz) and barriers checked only on a grid of dates are a little biased. We measure their spread around their own average and show the lean separately.</li>
+      <li><b>Speeds are rough.</b> Timings come from one thread in your browser and are noisy.</li>
+      <li><b>Data.</b> Prices and option quotes for SPY, QQQ, IWM, AAPL, MSFT and NVDA at the close of 24 November 2026, from Yahoo Finance; the three-month Treasury rate from FRED. You can switch to a synthetic market drawn in your browser.</li>
+      <li><b>Checks.</b> Every price is compared with one that was not simulated: Black–Scholes, Merton’s series, a quadrature for the Asian, Reiner–Rubinstein for barriers and a lattice for the American put. The browser engine matches the native C++ build to nine digits.</li>
+    </ul>
+  </aside>
+</section>
+<footer class="foot"><p>Marco Polo · variance reduction for Monte Carlo option pricing · <a href="https://github.com/chai314/marco-polo-v2">source</a></p></footer>
+<footer class="foot"><p>Marco Polo: variance reduction for Monte Carlo option pricing. <a href="https://github.com/chai314/marco-polo-v2">Source code</a></p></footer>
 <div id="tip" class="tip" role="status" hidden></div>
 <noscript><p class="noscript">This page prices options in your browser and needs JavaScript.</p></noscript>
 <script src="js/engine.wasm.js" defer></script>
@@ -100,8 +205,10 @@
 <script src="js/engine.js" defer></script>
 <script src="js/market-model.js" defer></script>
 <script src="js/ink.js" defer></script>
+<script src="js/board.js" defer></script>
 <script src="js/notes.js" defer></script>
 <script src="js/views.js" defer></script>
 <script src="js/app.js" defer></script>
+<script src="js/story.js" defer></script>
 </body>
 </html>

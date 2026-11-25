@@ -227,17 +227,20 @@ const Engine = (() => {
   }
 
   // Queue a call. Calls tagged with an old version are dropped before they start.
-  function call(op, args, onPart) {
+  function call(op, args, onPart, channel = "lab") {
     return new Promise((resolve, reject) => {
-      queue.push({ op, args, resolve, reject, onPart, version });
+      const job = { op, args, resolve, reject, onPart, version, channel };
+      // the story is what the visitor is looking at: its jobs go ahead of the lab's, in order
+      if (channel === "story") { let at = 0; while (at < queue.length && queue[at].channel === "story") at++; queue.splice(at, 0, job); } else queue.push(job);
       pump();
     });
   }
 
   // Abandon everything still queued: the inputs have changed.
-  function reset() {
+  // Only the jobs of one channel ("lab" by default; the story uses "story") are dropped.
+  function reset(channel = "lab") {
     version++;
-    for (const job of queue.splice(0)) job.reject(new Error("stale"));
+    for (let i = queue.length - 1; i >= 0; i--) if (queue[i].channel === channel) queue.splice(i, 1)[0].reject(new Error("stale"));
   }
 
   return { start, call, reset };

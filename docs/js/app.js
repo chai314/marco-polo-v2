@@ -1,6 +1,10 @@
 // State, the term sheet, the pricing every view draws on, and the result rail.
 "use strict";
 
+// Resolves with the engine's thread count once Engine.start() has finished; the story waits on it.
+let readyOk, readyFail;
+window.ready = new Promise((ok, no) => { readyOk = ok; readyFail = no; });
+window.ready.catch(() => {});
 const $ = (id) => document.getElementById(id);
 const LETTERS = ["A", "C", "S", "K"], BIT = { A: 1, C: 2, S: 4, K: 8 };
 const NAME = { A: "Antithetic", C: "Control variate", S: "Stratified", K: "Conditional" };
@@ -9,7 +13,7 @@ const START = { european: 7, merton: 12, asian: 2, barrier: 14, american: 3 };
 const KIND = { european: "Black–Scholes", merton: "Merton series", asian: "quadrature", barrier: "Reiner–Rubinstein", american: "lattice" };
 const flat = (p) => p === "european" || p === "merton";
 
-const state = { product: "european", pick: {}, seeded: {}, gen: 0, view: "race", results: new Map(), ref: NaN, market: null, touchedN: false, engine: "", cache: new Map() };
+const state = { product: "european", pick: {}, seeded: {}, gen: 0, view: "board", results: new Map(), ref: NaN, market: null, touchedN: false, engine: "", cache: new Map() };
 const letters = (f) => LETTERS.filter((l) => f & BIT[l]);
 const dots = (f) => letters(f).map((l) => `<i class="dot ${l}">${l}</i>`).join("");
 const word = (f) => letters(f).join("+") || "Plain";
@@ -222,7 +226,6 @@ function setProduct(p) {
 function setView(v) {
   if (!Views[v] || v === state.view) return;
   state.view = v;
-  try { history.replaceState(null, "", "#" + v); } catch { /* file:// in some browsers */ }
   show("fresh");
 }
 function useFit(s) {
@@ -231,7 +234,6 @@ function useFit(s) {
   state.product = "european";
   $("i-model").value = "merton";
   state.view = "race";
-  try { history.replaceState(null, "", "#race"); } catch { /* ignore */ }
   recompute("fresh");
 }
 // Drag a field's label sideways to change its number, as in a design tool. Arrow keys step it.
@@ -274,8 +276,6 @@ function tabs(host, attr, act) { // arrow keys move between tabs, as the ARIA pa
   document.querySelector(".rail").addEventListener("scroll", (e) => { const r = e.target; r.classList.toggle("more", r.scrollHeight - r.scrollTop > r.clientHeight + 4); });
   $("i-ticker").innerHTML = Object.keys(window.MARKET).map((t) => `<option>${t}</option>`).join("");
   document.querySelectorAll(".sheet input[type=number]").forEach(scrub);
-  const start = location.hash.slice(1);
-  if (Views[start]) state.view = start;
   syncInputs();
   document.querySelectorAll("[data-view]").forEach((b) => b.setAttribute("aria-selected", b.dataset.view === state.view));
   document.body.dataset.view = state.view;
@@ -298,14 +298,18 @@ function tabs(host, attr, act) { // arrow keys move between tabs, as the ARIA pa
   $("form").addEventListener("submit", (e) => e.preventDefault());
   $("b-sheet").onclick = () => { const open = document.body.classList.toggle("sheet-open"); $("b-sheet").setAttribute("aria-expanded", open); };
   $("b-reset").onclick = async () => { await loadMarket(true); recompute("fresh"); };
+  let labSeen = false; // the shortcuts only act while the lab is at least 30% in view
+  new IntersectionObserver((es) => {
+    const e = es[es.length - 1], h = Math.min(e.boundingClientRect.height, e.rootBounds ? e.rootBounds.height : innerHeight);
+    labSeen = e.isIntersecting && e.intersectionRect.height >= 0.3 * h - 1;
+  }, { threshold: Array.from({ length: 21 }, (_, i) => i / 20) }).observe($("lab"));
   addEventListener("keydown", (e) => {
-    if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || !state.spec) return;
+    if (!labSeen || e.metaKey || e.ctrlKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || !state.spec) return;
     const k = e.key.toUpperCase();
     if (BIT[k] && allowed(state.spec) & BIT[k]) { e.preventDefault(); choose(pick(state.spec) ^ BIT[k]); }
-    else if ("1234".includes(e.key) && e.key !== " ") setView(["race", "paths", "market", "notes"][Number(e.key) - 1]);
+    else if ("12345".includes(e.key) && e.key !== " ") setView(["board", "race", "paths", "market", "notes"][Number(e.key) - 1]);
     else if (k === "R") $("b-reset").click();
   });
-  addEventListener("hashchange", () => setView(location.hash.slice(1)));
   let rt;
   new ResizeObserver(() => { Ink.size(); clearTimeout(rt); rt = setTimeout(() => show("resize"), 140); }).observe($("stage"));
   try {
@@ -313,10 +317,12 @@ function tabs(host, attr, act) { // arrow keys move between tabs, as the ARIA pa
     $("wait").textContent = "Compiling the C++ engine for your browser";
     const n = await Engine.start();
     state.engine = `C++ in WebAssembly on ${n} threads`;
+    readyOk(n);
     $("wait").textContent = "Pricing every combination";
     await loadMarket(true);
     await recompute("fresh");
   } catch (e) {
+    readyFail(e);
     $("status-text").textContent = "The engine did not start";
     $("wait").hidden = true;
     fail("This browser could not start the WebAssembly engine: " + e.message);
