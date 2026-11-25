@@ -33,7 +33,7 @@ const Views = (() => {
     document.getElementById("t-drop1").onclick = () => run(1);
     document.getElementById("t-drop1k").onclick = () => run(1000);
     document.getElementById("t-clear").onclick = () => galton.clear();
-    ctx.caption("Each ball is one simulated future. The needle is the engine’s estimate after that many balls; the yellow band is the true price. Switch tricks on the right and drop again." + (BOARD_NOTE[spec.product] || ""));
+    ctx.caption("Each ball is one simulated future. The needle is the engine’s own estimate after that many balls, and the yellow bar is the true price. Switch tricks on the right and watch the needle calm down." + (BOARD_NOTE[spec.product] || ""));
     const trace = (f) => {
       const key = JSON.stringify(["board", spec, base.n, base.seed, base.strata, f]);
       if (!ctx.cache.has(key)) {
@@ -49,6 +49,7 @@ const Views = (() => {
       if (!ctx.alive()) return;
       galton.setTrace(mine, word(sel));
       galton.setCompare(sel ? plain : null);
+      if (galton.count === 0) run(base.n >= 2000 ? 2000 : 1000); // an empty board teaches nothing: fill it
     } catch (e) { if (e.message !== "stale") throw e; }
   }
 
