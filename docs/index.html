@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marco Polo · variance reduction, measured</title>
+<meta name="description" content="Four variance-reduction methods for Monte Carlo option pricing, in every combination, measured at equal cost against exact prices. A C++ engine running in your browser.">
+<meta name="theme-color" content="#14171a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314171a'/%3E%3Cpath d='M5 24C10 24 12 8 16 8s6 16 11 16' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 24C10 24 12 8 16 8s6 16 11 16"/></svg>
+    <h1>Marco Polo</h1>
+    <p class="tag">Variance reduction, measured in your browser</p>
+  </div>
+  <div class="products" role="tablist" aria-label="Product">
+    <button type="button" role="tab" data-product="european">European</button><button type="button" role="tab" data-product="asian">Asian</button><button type="button" role="tab" data-product="barrier">Barrier</button><button type="button" role="tab" data-product="american">American</button>
+  </div>
+  <p id="status" class="status" aria-live="polite"><span class="pulse" aria-hidden="true"></span><span id="status-text">Starting the engine</span></p>
+</header>
+
+<form id="form" class="sheet" autocomplete="off" aria-label="Contract and budget" novalidate>
+  <button type="button" id="b-sheet" class="summary" aria-expanded="false" aria-controls="fields"><span id="summary">Contract</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg></button>
+  <div class="fields" id="fields">
+    <fieldset class="group">
+      <legend>Contract</legend>
+      <label class="f" data-for="european asian barrier"><span>Option</span><select id="i-kind"><option value="call">Call</option><option value="put">Put</option></select></label>
+      <label class="f" data-for="american"><span>Option</span><output class="fixed">Put</output></label>
+      <label class="f"><span>Underlying</span><select id="i-ticker"></select></label>
+      <label class="f num"><span>Spot</span><input id="i-S0" type="number" min="0.01" step="any" data-step="1" inputmode="decimal"></label>
+      <label class="f num"><span>Strike</span><input id="i-K" type="number" min="0.01" step="any" data-step="1" inputmode="decimal"></label>
+      <label class="f num"><span>Years</span><input id="i-T" type="number" min="0.05" max="3" step="any" data-step="0.05" value="0.5" inputmode="decimal"></label>
+      <label class="f" data-for="barrier"><span>Barrier</span><select id="i-knock"><option value="out">Knock out</option><option value="in">Knock in</option></select></label>
+      <label class="f" data-for="barrier"><span>Direction</span><select id="i-direction"><option value="down">Down</option><option value="up">Up</option></select></label>
+      <label class="f num" data-for="barrier"><span>Level</span><input id="i-H" type="number" min="0.01" step="any" data-step="1" inputmode="decimal"></label>
+      <label class="f" data-for="barrier"><span>Monitoring</span><select id="i-mode"><option value="bridge">Brownian bridge</option><option value="naive">Naive grid</option><option value="shifted">Shifted grid</option></select></label>
+      <label class="f" data-for="asian barrier"><span>Dates</span><select id="i-m"><option>5</option><option>12</option><option>25</option><option selected>50</option><option>100</option><option>252</option></select></label>
+      <label class="f" data-for="american"><span>Exercise dates</span><select id="i-dates"><option>50</option><option>24</option><option>12</option><option>4</option><option>2</option></select></label>
+    </fieldset>
+    <fieldset class="group">
+      <legend>Model</legend>
+      <label class="f" data-for="european"><span>Dynamics</span><select id="i-model"><option value="merton">Diffusion + jumps</option><option value="gbm">Diffusion</option></select></label>
+      <label class="f num" data-for="diffusion"><span>Vol %</span><input id="i-sigma" type="number" min="1" max="200" step="any" data-step="0.5" inputmode="decimal"></label>
+      <label class="f num" data-for="merton"><span>Vol %</span><input id="i-sigmaD" type="number" min="1" max="200" step="any" data-step="0.5" inputmode="decimal"></label>
+      <label class="f num" data-for="merton"><span>Jumps / yr</span><input id="i-lam" type="number" min="0" max="20" step="any" data-step="0.05" inputmode="decimal"></label>
+      <label class="f num" data-for="merton"><span>Mean jump %</span><input id="i-muJ" type="number" min="-80" max="50" step="any" data-step="0.5" inputmode="decimal"></label>
+      <label class="f num" data-for="merton"><span>Jump vol %</span><input id="i-delta" type="number" min="0" max="80" step="any" data-step="0.5" inputmode="decimal"></label>
+      <label class="f num"><span>Rate %</span><input id="i-r" type="number" min="-5" max="30" step="any" data-step="0.05" inputmode="decimal"></label>
+      <label class="f num"><span>Dividend %</span><input id="i-q" type="number" min="0" max="30" step="any" data-step="0.05" inputmode="decimal"></label>
+      <label class="f"><span>Data</span><select id="i-source"><option value="snapshot">Market close</option><option value="synthetic">Synthetic</option></select></label>
+    </fieldset>
+    <fieldset class="group">
+      <legend>Budget</legend>
+      <label class="f"><span>Paths a run</span><select id="i-n"><option>1000</option><option>2000</option><option>5000</option><option>10000</option><option>20000</option></select></label>
+      <label class="f" data-for="strata"><span>Strata</span><select id="i-strata"><option>4</option><option>16</option><option selected>32</option><option>64</option></select></label>
+      <label class="f num"><span>Seed</span><input id="i-seed" type="number" min="0" max="2147483647" step="1" data-step="1" value="7" inputmode="numeric"></label>
+      <button type="button" id="b-reset" class="quiet" title="Reset to the market (R)">Reset</button>
+    </fieldset>
+  </div>
+  <p id="error" class="error" role="alert" hidden></p>
+</form>
+
+<main class="work">
+  <section class="plot" aria-label="Evidence">
+    <div class="bar">
+      <div class="views" role="tablist" aria-label="Views">
+        <button type="button" role="tab" data-view="race">Convergence<kbd>1</kbd></button><button type="button" role="tab" data-view="paths">Paths<kbd>2</kbd></button><button type="button" role="tab" data-view="market">Market<kbd>3</kbd></button><button type="button" role="tab" data-view="notes">Method<kbd>4</kbd></button>
+      </div>
+      <div id="tools" class="tools"></div>
+    </div>
+    <div id="stage" class="stage">
+      <svg id="marks" class="marks"></svg>
+      <div id="sheet" class="reading" hidden></div>
+      <p id="wait" class="wait" hidden></p>
+    </div>
+    <p id="caption" class="caption"></p>
+  </section>
+
+  <aside class="rail" aria-label="Result">
+    <div class="keys" id="keys" role="group" aria-label="Variance-reduction methods"></div>
+    <div class="verdict" id="verdict" aria-live="polite">
+      <h2 id="finding">Pricing</h2>
+      <table id="result" class="result"></table>
+      <p id="check" class="check"></p>
+    </div>
+    <div class="rank">
+      <h3>Every combination <span id="rank-note"></span></h3>
+      <ol id="ranking"></ol>
+    </div>
+    <p id="caveat" class="caveat" hidden></p>
+  </aside>
+</main>
+<div id="tip" class="tip" role="status" hidden></div>
+<noscript><p class="noscript">This page prices options in your browser and needs JavaScript.</p></noscript>
+<script src="js/engine.wasm.js" defer></script>
+<script src="js/market.js" defer></script>
+<script src="js/engine.js" defer></script>
+<script src="js/market-model.js" defer></script>
+<script src="js/ink.js" defer></script>
+<script src="js/notes.js" defer></script>
+<script src="js/views.js" defer></script>
+<script src="js/app.js" defer></script>
+</body>
+</html>

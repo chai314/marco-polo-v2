@@ -1,0 +1,7 @@
+-r requirements.txt
+pytest>=8
+ziglang>=0.13
+nbformat>=5.10
+nbclient>=0.10
+ipykernel>=6.29
+matplotlib>=3.8
