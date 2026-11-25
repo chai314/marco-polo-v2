@@ -190,7 +190,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 #ranking button[aria-pressed="true"] .track i { background: var(--ink); }
 .x { font-size: 13px; text-align: right; color: var(--ink); }
 .x.worse { color: var(--red); }
-.rail.more { mask-image: linear-gradient(#000 calc(100% - 36px), transparent); }
+.rail.more { mask-image: linear-gradient(var(--ink) calc(100% - 36px), transparent); }
 .caveat { margin: 0; font-size: 12.5px; line-height: 1.5; padding: 10px 12px; border: 1px solid #ecd3ad; background: #fdf6ea; border-radius: 8px; color: #4d3511; }
 body.busy .verdict, body.busy .rank, body.busy[data-view=race] .stage { opacity: .5; }
 .stage { transition: opacity .25s; }
