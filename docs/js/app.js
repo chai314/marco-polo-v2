@@ -139,7 +139,7 @@ function rail() {
     b.onpointerleave = () => tip(null);
   });
   const c = [trouble(), bias()].filter(Boolean).join(" ");
-  $("caveat").innerHTML = c ? `<b>Read this.</b> ${c}` : "";
+  $("caveat").innerHTML = c;
   $("caveat").hidden = !c;
   const sel_ = $("ranking").querySelector('[aria-pressed="true"]'), rl = document.querySelector(".rail");
   if (sel_ && rl.scrollHeight > rl.clientHeight) { // scroll only the rail, never the page

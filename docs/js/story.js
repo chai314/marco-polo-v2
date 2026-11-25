@@ -208,7 +208,7 @@
   }
 
   // ---------------------------------------------------------------- the cloud of experiments: four rows, one shared scale
-  const NS = "http://www.w3.org/2000/svg", ROWS = [500, 2000, 8000, 32000], PITCH = 46, TOP = 36, CH = 208, LEFT = 74, RIGHT = 84, DOTS = 40, REPS = 120;
+  const NS = "http://www.w3.org/2000/svg", ROWS = [500, 2000, 8000, 32000], PITCH = 52, TOP = 40, CH = 236, LEFT = 84, RIGHT = 104, DOTS = 40, REPS = 120;
   const cloud = { W: 0, svg: null, rows: [], data: [], runs: [0, 0, 0, 0], exact: NaN, half: NaN, sigma1: NaN };
   const svgEl = (tag, attrs = {}, parent) => { const el = document.createElementNS(NS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); if (parent) parent.appendChild(el); return el; };
   const jit = (i) => ((((i + 1) * 2654435761) >>> 0) % 997) / 997;

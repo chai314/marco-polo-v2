@@ -37,7 +37,7 @@
       <h2 id="h-one">One ball is one path</h2>
       <p>Under the risk-neutral measure <span data-tex="\Q"></span>, the stock follows geometric Brownian motion with rate <span data-tex="r"></span>, dividend yield <span data-tex="q"></span> and volatility <span data-tex="\sigma"></span>. The log-price has Gaussian increments, so the path can be simulated exactly on any grid of dates:</p>
       <div class="eq" data-eq="S_{t_{j+1}}=S_{t_j}\exp\!\Big[\big(r-q-\tfrac12\sigma^2\big)\Delta t+\sigma\sqrt{\Delta t}\,Z_{j+1}\Big],\qquad Z_j\overset{\text{iid}}{\sim}\N(0,1)"></div>
-      <p>Each row of pins is a date, and the horizontal position is <span data-tex="\ln S_t"></span>. The ball starts at <span data-tex="S_0"></span> = <b data-live="S0">718.78</b>, the close of <b data-live="ticker">SPY</b>, and lands at <span data-tex="S_T"></span>, <b data-live="T">half a year</b> later. The contract is a European call with strike <span data-tex="K"></span> = <b data-live="K">719</b>, so the path’s discounted payoff is</p>
+      <p>Each row of pins is a date, and the horizontal position is <span data-tex="\ln S_t"></span>. The ball starts at <span data-tex="S_0"></span> = <span class="num" data-live="S0">718.78</span>, the close of <span class="num" data-live="ticker">SPY</span>, and lands at <span data-tex="S_T"></span>, <span class="num" data-live="T">half a year</span> later. The contract is a European call with strike <span data-tex="K"></span> = <span class="num" data-live="K">719</span>, so the path’s discounted payoff is</p>
       <div class="eq" data-eq="Y=e^{-rT}\,(S_T-K)^+"></div>
       <p class="readout" data-live="lastBall">Simulate a path to see its payoff.</p>
       <div class="acts"><button type="button" class="press" data-act="drop" data-n="1"><span>Simulate another</span></button></div>
@@ -48,18 +48,18 @@
       <h2 id="h-many">The sample mean</h2>
       <p>With <span data-tex="N"></span> independent paths, the estimator is the sample mean of their payoffs. Its expectation is the price, for every <span data-tex="N"></span>:</p>
       <div class="eq" data-eq="\widehat V_N=\frac1N\sum_{i=1}^{N}Y_i,\qquad \E\big[\widehat V_N\big]=V_0"></div>
-      <p>For this contract the price is known in closed form, so we can check the estimator against it. Black and Scholes give <b data-live="exact">46.53</b>:</p>
+      <p>For this contract the price is known in closed form, so we can check the estimator against it. Black and Scholes give <span class="num" data-live="exact">46.53</span>:</p>
       <div class="eq" data-eq="V_0=S_0e^{-qT}\Phi(d_1)-Ke^{-rT}\Phi(d_2),\qquad d_{1,2}=\frac{\ln(S_0/K)+(r-q\pm\frac12\sigma^2)T}{\sigma\sqrt T}"></div>
       <p>The simulation never uses it: the yellow mark is there only to check against.</p>
       <div class="acts"><button type="button" class="press" data-act="drop" data-n="2000"><span>Simulate 2,000</span></button></div>
-      <p class="readout">By the central limit theorem, <span data-tex="\widehat V_N\pm1.96\,s_N/\sqrt N"></span> covers <span data-tex="V_0"></span> with probability close to 95%. With <span data-tex="N"></span> = <b data-live="N">2,000</b> the half-width is <span class="pm" data-live="err:0">±3.0</span>.</p>
+      <p class="readout">By the central limit theorem, <span data-tex="\widehat V_N\pm1.96\,s_N/\sqrt N"></span> covers <span data-tex="V_0"></span> with probability close to 95%. With <span data-tex="N"></span> = <span class="num" data-live="N">2,000</span> the half-width is <span class="pm" data-live="err:0">±3.0</span>.</p>
     </section>
 
     <section class="step" data-step="cost" aria-labelledby="h-cost">
       <h2 id="h-cost">The error falls like <span data-tex="1/\sqrt N"></span></h2>
       <p>The variance of a mean of <span data-tex="N"></span> independent draws is the variance of one draw divided by <span data-tex="N"></span>, so</p>
       <div class="eq" data-eq="\SE\big(\widehat V_N\big)=\frac{\sigma_Y}{\sqrt N},\qquad \sigma_Y^2=\Var(Y)"></div>
-      <p>Here <span data-tex="\sigma_Y"></span> ≈ <b data-live="sigY">68</b>. Halving the error takes four times the paths, and one more correct digit takes a hundred times. Each dot below is a complete estimate; each row uses four times the paths of the row above.</p>
+      <p>Here <span data-tex="\sigma_Y"></span> ≈ <span class="num" data-live="sigY">68</span>. Halving the error takes four times the paths, and one more correct digit takes a hundred times. Each dot below is a complete estimate; each row uses four times the paths of the row above.</p>
       <div class="cloud-wrap">
         <div class="seg" role="radiogroup" aria-label="Paths in each estimate"><button type="button" role="radio" data-act="cloud" data-n="500">500</button><button type="button" role="radio" data-act="cloud" data-n="2000">2,000</button><button type="button" role="radio" data-act="cloud" data-n="8000">8,000</button><button type="button" role="radio" data-act="cloud" data-n="32000">32,000</button></div>
         <div id="cloud" class="cloud" aria-live="polite"></div>
@@ -105,9 +105,9 @@
 
     <section class="step trick" data-step="K" style="--c:var(--K)" aria-labelledby="h-K">
       <h2 id="h-K"><i class="disc">K</i>Conditional Monte Carlo</h2>
-      <p>Now let the stock jump. In Merton’s model a Poisson process <span data-tex="N_t"></span> with intensity <span data-tex="\lambda"></span> = <b data-live="lam">0.43</b> a year multiplies the price by <span data-tex="e^{J}"></span> at each jump, with <span data-tex="J\sim\N(\mu_J,\delta^2)"></span> and <span data-tex="\mu_J"></span> = <b data-live="muJ">−0.28</b>, fitted to the option quotes:</p>
+      <p>Now let the stock jump. In Merton’s model a Poisson process <span data-tex="N_t"></span> with intensity <span data-tex="\lambda"></span> = <span class="num" data-live="lam">0.43</span> a year multiplies the price by <span data-tex="e^{J}"></span> at each jump, with <span data-tex="J\sim\N(\mu_J,\delta^2)"></span> and <span data-tex="\mu_J"></span> = <span class="num" data-live="muJ">−0.28</span>, fitted to the option quotes:</p>
       <div class="eq" data-eq="\frac{\dd S_t}{S_{t^-}}=(r-q-\lambda\kappa)\,\dd t+\sigma\,\dd W_t+\big(e^{J}-1\big)\,\dd N_t,\qquad \kappa=e^{\mu_J+\delta^2/2}-1"></div>
-      <p>The exact price becomes <b data-live="exactJ">47.30</b>. Given the number of jumps <span data-tex="N_T=n"></span>, <span data-tex="\ln S_T"></span> is Gaussian, so the conditional expectation is a Black–Scholes price with forward <span data-tex="F_n=S_0e^{(r-q-\lambda\kappa)T}(1+\kappa)^n"></span> and variance <span data-tex="\sigma_n^2T=\sigma^2T+n\delta^2"></span>:</p>
+      <p>The exact price becomes <span class="num" data-live="exactJ">47.30</span>. Given the number of jumps <span data-tex="N_T=n"></span>, <span data-tex="\ln S_T"></span> is Gaussian, so the conditional expectation is a Black–Scholes price with forward <span data-tex="F_n=S_0e^{(r-q-\lambda\kappa)T}(1+\kappa)^n"></span> and variance <span data-tex="\sigma_n^2T=\sigma^2T+n\delta^2"></span>:</p>
       <div class="eq" data-eq="\E\big[Y\mid N_T=n\big]=e^{-rT}\big[F_n\Phi(d_1^{(n)})-K\Phi(d_2^{(n)})\big],\qquad d_{1,2}^{(n)}=\frac{\ln(F_n/K)\pm\frac12\sigma_n^2T}{\sigma_n\sqrt T}"></div>
       <p>So we simulate only <span data-tex="N_T"></span> and average the formula. By the law of total variance this can only help:</p>
       <div class="eq" data-eq="\Var\big(\E[Y\mid N_T]\big)=\Var(Y)-\E\big[\Var(Y\mid N_T)\big]\;\le\;\Var(Y)"></div>
@@ -133,7 +133,7 @@
   <header class="lab-head">
     <h2 id="h-lab">The lab</h2>
     <p>Every product, underlying and combination of methods. Any change reprices everything. Drag a field’s label sideways to change its value.</p>
-    <p class="hints"><b>Paths a run</b> is <span data-tex="N"></span> for one estimate. <b>Strata</b> is <span data-tex="H"></span> for stratified sampling. <b>Seed</b> fixes the random numbers, so the same seed gives the same paths. <b>Jump vol</b> is <span data-tex="\delta"></span>, the standard deviation of the log jump size.</p>
+    <p class="hints"><dfn>Paths a run</dfn> is <span data-tex="N"></span> for one estimate, <dfn>Strata</dfn> is <span data-tex="H"></span> for stratified sampling, and <dfn>Jump vol</dfn> is <span data-tex="\delta"></span>, the standard deviation of the log jump size. The same <dfn>Seed</dfn> gives the same paths.</p>
   </header>
 <form id="form" class="sheet" autocomplete="off" aria-label="Contract and budget" novalidate>
   <div class="products" role="tablist" aria-label="Product">
@@ -213,12 +213,12 @@
   <aside class="fine" aria-labelledby="h-fine">
     <h2 id="h-fine">How the numbers are measured</h2>
     <ul>
-      <li><b>The board is the engine’s paths.</b> Balls are drawn from the same generator and model as the engine. For a European option the engine samples <span data-tex="S_T"></span> in one step, which is exact; the board shows intermediate dates from the same law. The gauge and every error come from the engine’s own estimates.</li>
-      <li><b>Reported errors can be too small.</b> If the variance across repeated runs exceeds the mean reported variance by more than sampling noise allows (at least 25%), the observed variance is used and the page says so. This happens under jumps: a short run may contain no jump.</li>
-      <li><b>Two estimators are biased.</b> Longstaff–Schwartz prices the American put with an estimated exercise rule, which is suboptimal, so it is biased low. A barrier monitored only on a grid misses crossings between dates. For both, variance is measured about the estimator’s own mean and the bias is reported separately.</li>
-      <li><b>Run times are rough.</b> They come from one thread in your browser.</li>
-      <li><b>Data.</b> Closes and option quotes for SPY, QQQ, IWM, AAPL, MSFT and NVDA at 24 November 2026 from Yahoo Finance, and the three-month Treasury yield from FRED. The page can also generate a synthetic market, and says so when it does.</li>
-      <li><b>Checks.</b> Every price is compared with one that was not simulated: Black–Scholes, Merton’s series, numerical integration for the arithmetic Asian, Reiner–Rubinstein for barriers and a lattice for the American put. The WebAssembly engine agrees with the native C++ to nine digits.</li>
+      <li><h3>The board is the engine’s paths</h3>Balls are drawn from the same generator and model as the engine. For a European option the engine samples <span data-tex="S_T"></span> in one step, which is exact; the board shows intermediate dates from the same law. The gauge and every error come from the engine’s own estimates.</li>
+      <li><h3>Reported errors can be too small</h3>If the variance across repeated runs exceeds the mean reported variance by more than sampling noise allows (at least 25%), the observed variance is used and the page says so. This happens under jumps: a short run may contain no jump.</li>
+      <li><h3>Two estimators are biased</h3>Longstaff–Schwartz prices the American put with an estimated exercise rule, which is suboptimal, so it is biased low. A barrier monitored only on a grid misses crossings between dates. For both, variance is measured about the estimator’s own mean and the bias is reported separately.</li>
+      <li><h3>Run times are rough</h3>They come from one thread in your browser.</li>
+      <li><h3>Data</h3>Closes and option quotes for SPY, QQQ, IWM, AAPL, MSFT and NVDA at 24 November 2026 from Yahoo Finance, and the three-month Treasury yield from FRED. The page can also generate a synthetic market, and says so when it does.</li>
+      <li><h3>Checks</h3>Every price is compared with one that was not simulated: Black–Scholes, Merton’s series, numerical integration for the arithmetic Asian, Reiner–Rubinstein for barriers and a lattice for the American put. The WebAssembly engine agrees with the native C++ to nine digits.</li>
     </ul>
   </aside>
 </section>

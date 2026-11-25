@@ -176,8 +176,8 @@ const Board = (() => {
       // a wide board keeps the fall close to square and gives the rest of its width to the gauge
       const wide = gauge && W >= 620 && W > 1.2 * H, colW = wide ? Math.round(clamp(W - 1.14 * H, 230, 0.42 * W)) : 0;
       const x0 = pad, x1 = W - pad - colW, XR = x1 + pad;
-      const gh = gauge && !wide ? 104 + (f.C ? 30 : 0) : 0, below = 38 + (f.S ? 44 : 0);
-      const floor = H - gh - (gh ? 8 : 0) - below, pinTop = 44;
+      const gh = gauge && !wide ? 128 + (f.C ? 34 : 0) : 0, below = 38 + (f.S ? 44 : 0);
+      const floor = H - gh - (gh ? 8 : 0) - below, pinTop = 52;
       let heapH = Math.max(64, 0.43 * (floor - pinTop)), pinBot = floor - heapH - 20;
       if (pinBot - pinTop < 90) { heapH = Math.max(56, heapH - (90 - (pinBot - pinTop))); pinBot = floor - heapH - 20; }
       const sc = S.scale || scaleFor(null), lo = Math.log(sc.lo), hi = Math.log(sc.hi), bx = (x1 - x0) / (hi - lo), ax = x0 + (Math.log(sp.S0) - lo) * bx;
@@ -189,8 +189,8 @@ const Board = (() => {
       L = { W, H, small, wide, gauge, r, x0, x1, XR, floor, pinTop, pinBot, pinH, nr, gap, dxp: clamp(gap * 1.08, 14, 28), snap, nb, bw: (x1 - x0) / nb, ax, bx, lo, hi, m, xP, gh, below, f, xK: xP(sp.K), xS: xP(sp.S0), xH: sp.H ? xP(sp.H) : NaN };
       L.heapTop = pinBot + 20; L.heapH = floor - L.heapTop;
       // the gauge: a strip under the board, or a column beside it
-      if (wide) { L.lx = XR + 20; L.gx0 = L.lx; L.gx1 = W - pad; L.gy = 14; L.ay = L.gy + 142; L.yc = H - 52; L.ycLab = L.yc + 4; L.tapeY = L.ay + 38; L.tapeH = Math.max(40, (f.C ? L.yc - 22 : H - 22) - L.tapeY); }
-      else { L.lx = x0; L.gx0 = x0 + Math.min(170, W * 0.38) + 14; L.gx1 = x1; L.gy = H - 104 - 6; L.ay = L.gy + 70; L.yc = L.gy - 30; L.ycLab = L.yc + 12; }
+      if (wide) { L.lx = XR + 20; L.gx0 = L.lx; L.gx1 = W - pad; L.gy = 18; L.ay = L.gy + 168; L.yc = H - 52; L.ycLab = L.yc + 4; L.tapeY = L.ay + 44; L.tapeH = Math.max(40, (f.C ? L.yc - 22 : H - 22) - L.tapeY); }
+      else { L.lx = x0; L.gx0 = x0 + Math.min(170, W * 0.38) + 14; L.gx1 = x1; L.gy = H - 128 - 6; L.ay = L.gy + 92; L.yc = L.gy - 34; L.ycLab = L.yc + 13; }
       // trays sit in the top corner of the heap, away from the barrier
       const side = f.kind === 2 ? "left" : sp.H ? (sp.H < sp.S0 ? "right" : "left") : "right";
       const tw = f.kind === 1 ? 78 : f.kind === 2 ? 96 : 108;
@@ -222,26 +222,26 @@ const Board = (() => {
 
     // ------------------------------------------------------------ the static overlay
     function build() {
-      const sp = cfg.spec, f = L.f, b = S.cur, T = (x, y, s, o = {}) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${o.size || 12}" fill="${o.fill || MUTE}" text-anchor="${o.a || "start"}"${o.bold ? ' font-weight="700"' : ""} stroke="#fff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${esc(s)}</text>`;
+      const sp = cfg.spec, f = L.f, b = S.cur, T = (x, y, s, o = {}) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${o.size || 13.5}" fill="${o.fill || MUTE}" text-anchor="${o.a || "start"}"${o.bold ? ' font-weight="700"' : ""} stroke="#fff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${esc(s)}</text>`;
       let s = "";
       // hopper
       const hx = clamp(L.xS, 14, L.XR - 14);
-      s += `<path d="M${hx - 7} 20 L${hx + 7} 20 L${hx} 34 Z" fill="${INK}"/>`;
+      s += `<path d="M${hx - 7} 22 L${hx + 7} 22 L${hx} 36 Z" fill="${INK}"/>`;
       const hl = `S₀ = ${fmtP(sp.S0)}`;
-      s += hx < 100 ? T(hx + 12, 31, hl, { fill: INK }) : T(hx - 11, 31, hl, { a: "end", fill: INK });
+      s += hx < 100 ? T(hx + 13, 33, hl, { fill: INK }) : T(hx - 12, 33, hl, { a: "end", fill: INK });
       // the heap floor and price ticks
       if (show().heap !== false) {
         s += `<line x1="${L.x0 - 6}" x2="${L.x1 + 6}" y1="${L.floor + 0.5}" y2="${L.floor + 0.5}" stroke="${INK}" stroke-width="1"/>`;
         const tk = ticks(Math.exp(L.lo), Math.exp(L.hi), Math.max(3, Math.round((L.x1 - L.x0) / 90))), dec = decimals(tk.step);
-        for (const v of tk.vals) { const x = L.xP(v); if (x < L.x0 - 4 || x > L.x1 + 4) continue; s += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${L.floor + 1}" y2="${L.floor + 5}" stroke="${PIN}" stroke-width="1"/>` + `<text x="${x.toFixed(1)}" y="${L.floor + 19}" font-size="11.5" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`; }
-        s += `<text data-r="count" x="${L.x1}" y="${L.heapTop - 5}" font-size="13" font-weight="700" fill="${INK}" text-anchor="end" style="font-variant-numeric:tabular-nums" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">0 paths</text>`;
-        s += `<text x="${L.x1}" y="${L.floor + 34}" font-size="11" fill="${MUTE}" text-anchor="end"><tspan font-style="italic">S</tspan><tspan font-size="8.5" dy="3" font-style="italic">T</tspan><tspan dy="-3">, log scale</tspan></text>`;
+        for (const v of tk.vals) { const x = L.xP(v); if (x < L.x0 - 4 || x > L.x1 + 4) continue; s += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${L.floor + 1}" y2="${L.floor + 5}" stroke="${PIN}" stroke-width="1"/>` + `<text x="${x.toFixed(1)}" y="${L.floor + 19}" font-size="13" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`; }
+        s += `<text data-r="count" x="${L.x1}" y="${L.heapTop - 5}" font-size="14" font-weight="700" fill="${INK}" text-anchor="end" style="font-variant-numeric:tabular-nums" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">0 paths</text>`;
+        s += `<text x="${L.x1}" y="${L.floor + 34}" font-size="13" fill="${MUTE}" text-anchor="end"><tspan font-style="italic">S</tspan><tspan font-size="10" dy="3" font-style="italic">T</tspan><tspan dy="-3">, log scale</tspan></text>`;
         // strike and payoff zone label
         s += `<line x1="${L.xK.toFixed(1)}" x2="${L.xK.toFixed(1)}" y1="${L.heapTop}" y2="${L.floor}" stroke="${INK}" stroke-width="1.4"/>`;
         s += T(L.xK + (sp.call ? -6 : 6), L.heapTop - 5, `K = ${fmtP(sp.K)}`, { a: sp.call ? "end" : "start", fill: INK, bold: true });
         // the payoff label shares the row with the ball count at the right edge: keep it only where it fits
         if (!sp.call || L.xK + 6 + 62 < L.x1 - 84) s += T(L.xK + (sp.call ? 6 : -6), L.heapTop - 5, "payoff > 0", { a: sp.call ? "start" : "end", fill: MUTE });
-        if (sp.product === "asian") s += T(sp.call ? L.x0 : L.x1, L.heapTop + 15, "heaped by path average", { a: sp.call ? "start" : "end", size: 11.5 });
+        if (sp.product === "asian") s += T(sp.call ? L.x0 : L.x1, L.heapTop + 15, "heaped by path average", { a: sp.call ? "start" : "end", size: 13 });
       }
       // gadgets in the pin field
       if (f.A && b) { const mx = L.ax + L.bx * b.sorted[NP >> 1]; s += `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${L.pinTop}" y2="${L.pinBot}" stroke="${BLUE}" stroke-width="1" stroke-dasharray="5 4" opacity=".5"/>`; }
@@ -266,20 +266,20 @@ const Board = (() => {
           let d = "", open = false;
           for (const p of pts) { if (!p) { open = false; continue; } d += (open ? "L" : "M") + clamp(p[0], L.x0, L.x1).toFixed(1) + " " + p[1].toFixed(1); open = true; }
           const lab = good[Math.floor(good.length / 2)];
-          s += `<path d="${d}" fill="none" stroke="${INK}" stroke-width="1.4" stroke-dasharray="6 4"/>` + T(lab[0] - 8, lab[1] - 7, "exercise boundary", { size: 11.5, a: "end" });
+          s += `<path d="${d}" fill="none" stroke="${INK}" stroke-width="1.4" stroke-dasharray="6 4"/>` + T(lab[0] - 8, lab[1] - 7, "exercise boundary", { size: 13, a: "end" });
         }
       }
       // trays
       if (f.kind) {
         const t = L.tray, name = ["", "knocked out", "exercised early", "never knocked in"][f.kind], col = f.kind === 1 ? RED : f.kind === 2 ? INK : GHOST;
-        s += `<rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" fill="#fff" stroke="${col}" stroke-width="1.5"/>` + `<text x="${t.x + t.w / 2}" y="${t.y + 15}" font-size="11.5" fill="${f.kind === 3 ? MUTE : col}" text-anchor="middle">${name}</text>` + `<text data-r="tray" x="${t.x + t.w / 2}" y="${t.y + 33}" font-size="15" font-weight="700" fill="${INK}" text-anchor="middle">${S.trays[f.kind]}</text>`;
+        s += `<rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" fill="#fff" stroke="${col}" stroke-width="1.5"/>` + `<text x="${t.x + t.w / 2}" y="${t.y + 15}" font-size="13" fill="${f.kind === 3 ? MUTE : col}" text-anchor="middle">${name}</text>` + `<text data-r="tray" x="${t.x + t.w / 2}" y="${t.y + 33}" font-size="16" font-weight="700" fill="${INK}" text-anchor="middle">${S.trays[f.kind]}</text>`;
       }
       // lanes
       if (f.S && b) {
         for (let h = 1; h < 32; h++) { const x = L.ax + L.bx * b.sorted[Math.floor((NP * h) / 32)]; s += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${L.floor - 7}" y2="${L.floor + 1}" stroke="${GREEN}" stroke-width="1.5"/>`; }
-        s += `<g data-r="lanes"></g><text x="${L.x0}" y="${L.floor + 66}" font-size="11.5" fill="${GREEN_D}">32 strata of equal probability</text>`;
+        s += `<g data-r="lanes"></g><text x="${L.x0}" y="${L.floor + 66}" font-size="13" fill="${GREEN_D}">32 strata of equal probability</text>`;
       }
-      if (isFlat(sp.product) && show().heap !== false) s += `<path data-r="curve" fill="none" stroke="${f.ring ? VIOLET : MUTE}" stroke-width="${f.ring ? 1.8 : 1.3}"${f.ring ? "" : ' stroke-dasharray="5 4"'}/><text data-r="curveLabel" font-size="11.5" fill="${f.ring ? VIOLET : MUTE}" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text>`;
+      if (isFlat(sp.product) && show().heap !== false) s += `<path data-r="curve" fill="none" stroke="${f.ring ? VIOLET : MUTE}" stroke-width="${f.ring ? 1.8 : 1.3}"${f.ring ? "" : ' stroke-dasharray="5 4"'}/><text data-r="curveLabel" font-size="13" fill="${f.ring ? VIOLET : MUTE}" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text>`;
       // moving parts
       s += `<g data-r="trails"></g><g data-r="notch"></g><g data-r="chips"></g>`;
       if (L.gauge) s += gaugeSvg();
@@ -296,19 +296,19 @@ const Board = (() => {
       const y0 = L.gy, f = L.f, lx = L.lx, x1 = L.gx1, yc = L.yc, g0 = L.gx0, ay = L.ay;
       let s = "";
       if (L.wide) s += `<line x1="${L.XR + 0.5}" x2="${L.XR + 0.5}" y1="0" y2="${H}" stroke="${RULE}"/>`;
-      if (f.C) s += `<text x="${lx}" y="${L.ycLab}" font-size="11.5" fill="${MUTE}">mean of control C</text><line x1="${g0}" x2="${x1}" y1="${yc + 20}" y2="${yc + 20}" stroke="${RULE}"/><g data-r="stockTicks"></g><line data-r="stockKnown" y1="${yc + 12}" y2="${yc + 28}" stroke="${INK}" stroke-width="1.6"/><g data-r="stockNeedle" opacity="0"><line y1="${yc + 11}" y2="${yc + 29}" stroke="${ORANGE}" stroke-width="2.4"/></g>`;
-      s += `<text data-r="gLabel" x="${lx}" y="${y0 + 16}" font-size="12" fill="${MUTE}"></text>`;
-      s += `<text data-r="value" x="${lx}" y="${y0 + 46}" font-size="28" font-weight="700" fill="${INK}" style="font-variant-numeric:tabular-nums">\u2013</text>`;
-      s += `<text data-r="gNote" x="${lx}" y="${y0 + 59}" font-size="11" fill="${MUTE}"></text>`;
-      s += `<rect x="${lx}" y="${y0 + 66}" width="10" height="10" fill="${YELLOW}"/><text data-r="exactLabel" x="${lx + 16}" y="${y0 + 75.5}" font-size="12.5" fill="${INK}"></text>`;
+      if (f.C) s += `<text x="${lx}" y="${L.ycLab}" font-size="13" fill="${MUTE}">mean of control C</text><line x1="${g0}" x2="${x1}" y1="${yc + 20}" y2="${yc + 20}" stroke="${RULE}"/><g data-r="stockTicks"></g><line data-r="stockKnown" y1="${yc + 12}" y2="${yc + 28}" stroke="${INK}" stroke-width="1.6"/><g data-r="stockNeedle" opacity="0"><line y1="${yc + 11}" y2="${yc + 29}" stroke="${ORANGE}" stroke-width="2.4"/></g>`;
+      s += `<text data-r="gLabel" x="${lx}" y="${y0 + 14}" font-size="13" fill="${MUTE}"></text>`;
+      s += `<text data-r="value" x="${lx}" y="${y0 + 50}" font-size="30" font-weight="700" fill="${INK}" style="font-variant-numeric:tabular-nums">\u2013</text>`;
+      s += `<text data-r="gNote" x="${lx}" y="${y0 + 70}" font-size="13" fill="${MUTE}"></text>`;
+      s += `<rect x="${lx}" y="${y0 + 84}" width="11" height="11" fill="${YELLOW}"/><text data-r="exactLabel" x="${lx + 18}" y="${y0 + 94}" font-size="13.5" fill="${INK}"></text>`;
       s += `<line x1="${g0}" x2="${x1}" y1="${ay + 0.5}" y2="${ay + 0.5}" stroke="${RULE}" stroke-width="1"/><g data-r="axisTicks"></g>`;
       s += `<rect data-r="band" x="${(g0 + x1) / 2 - 4}" y="${ay - 30}" width="8" height="30" fill="${YELLOW}"/>`;
       s += `<g data-r="ghosts"></g>`;
-      for (const k of ["off", "offCmp"]) s += `<g data-r="${k}" opacity="0"><line stroke="${k === "off" ? INK : GHOST}" stroke-width="1" stroke-dasharray="3 3"/><path fill="${k === "off" ? INK : GHOST}"/><text font-size="11.5" font-weight="700" fill="${k === "off" ? INK : GHOST}" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text></g>`;
-      s += `<g data-r="cmp" opacity="0"><line y1="${ay - 26}" y2="${ay}" stroke="${GHOST}" stroke-width="2"/><path d="M-4 ${ay - 34} L4 ${ay - 34} L0 ${ay - 27} Z" fill="${GHOST}"/><text data-r="cmpLabel" x="-8" y="${ay - 27}" font-size="11.5" font-weight="700" fill="${GHOST}" text-anchor="end" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">plain</text></g>`;
+      for (const k of ["off", "offCmp"]) s += `<g data-r="${k}" opacity="0"><line stroke="${k === "off" ? INK : GHOST}" stroke-width="1" stroke-dasharray="3 3"/><path fill="${k === "off" ? INK : GHOST}"/><text font-size="13" font-weight="700" fill="${k === "off" ? INK : GHOST}" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text></g>`;
+      s += `<g data-r="cmp" opacity="0"><line y1="${ay - 26}" y2="${ay}" stroke="${GHOST}" stroke-width="2"/><path d="M-4 ${ay - 34} L4 ${ay - 34} L0 ${ay - 27} Z" fill="${GHOST}"/><text data-r="cmpLabel" x="-8" y="${ay - 27}" font-size="13" font-weight="700" fill="${GHOST}" text-anchor="end" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">plain</text></g>`;
       s += `<g data-r="needle" opacity="0"><line y1="${ay - 34}" y2="${ay}" stroke="${INK}" stroke-width="2"/><path d="M-4 ${ay - 42} L4 ${ay - 42} L0 ${ay - 34} Z" fill="${INK}"/></g>`;
-      s += `<text data-r="needleLabel" y="${ay - 35}" font-size="11.5" font-weight="700" fill="${INK}" text-anchor="start" opacity="0" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text>`;
-      if (f.C) s += `<g data-r="arrow" opacity="0"><line stroke="${ORANGE}" stroke-width="2"/><path fill="${ORANGE}"/><text font-size="11" fill="${ORANGE_D}" text-anchor="middle" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">\u2212\u03b2(C\u0304 \u2212 E[C])</text></g>`;
+      s += `<text data-r="needleLabel" y="${ay - 35}" font-size="13" font-weight="700" fill="${INK}" text-anchor="start" opacity="0" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text>`;
+      if (f.C) s += `<g data-r="arrow" opacity="0"><line stroke="${ORANGE}" stroke-width="2"/><path fill="${ORANGE}"/><text font-size="13" fill="${ORANGE_D}" text-anchor="middle" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">\u2212\u03b2(C\u0304 \u2212 E[C])</text></g>`;
       if (L.wide) s += `<svg x="${g0}" y="${L.tapeY}" width="${x1 - g0}" height="${L.tapeH}" overflow="hidden"><rect width="100%" height="100%" fill="#fafbfc"/><path data-r="tBand" fill="${INK}" fill-opacity=".07"/><line data-r="tExact" y1="0" y2="${L.tapeH}" stroke="${YELLOW}" stroke-width="3"/><path data-r="tPlain" fill="none" stroke="${GHOST}" stroke-width="1.1" stroke-dasharray="3 3"/><path data-r="tMine" fill="none" stroke="${INK}" stroke-width="1.1" stroke-dasharray="3 3"/><path data-r="tCmp" fill="none" stroke="${GHOST}" stroke-width="1.3" stroke-linejoin="round"/><path data-r="tRun" fill="none" stroke="${INK}" stroke-width="1.7" stroke-linejoin="round"/><circle data-r="tDot" r="4" fill="${INK}" opacity="0"/><g data-r="tTicks"></g></svg>`;
       return s;
     }
@@ -528,7 +528,7 @@ const Board = (() => {
           const top = slotY(ball.slot) - L.r; cx = clamp(ball.xBin, 48, L.XR - 48); cy = top - 9;
           if (cy < L.heapTop + 12) { const right = ball.bin < L.nb / 2; cx = clamp(ball.xBin + (right ? 12 : -12), 10, L.XR - 10); cy = L.heapTop + 16; anchor = right ? "start" : "end"; }
         }
-        const txt = el("text", { x: cx, y: cy, "font-size": "12", "font-weight": "700", fill: INK, "text-anchor": anchor, stroke: "#fff", "stroke-width": "3", "paint-order": "stroke", "stroke-linejoin": "round" });
+        const txt = el("text", { x: cx, y: cy, "font-size": "13", "font-weight": "700", fill: INK, "text-anchor": anchor, stroke: "#fff", "stroke-width": "3", "paint-order": "stroke", "stroke-linejoin": "round" });
         txt.style.transition = "opacity .5s"; txt.textContent = "payoff " + (ball.pay > 0 ? ball.pay.toFixed(2) : "0");
         R.chips.appendChild(txt); S.chips.push(txt);
         setTimeout(() => { txt.style.opacity = "0"; }, 2000);
@@ -585,9 +585,9 @@ const Board = (() => {
       const rng = G.range, px = (v) => clamp(gx0 + ((v - (center - rng)) / (2 * rng)) * (gx1 - gx0), gx0 + 3, gx1 - 3);
       px.raw = (v) => gx0 + ((v - (center - rng)) / (2 * rng)) * (gx1 - gx0);
       // ticks
-      const tk = ticks(center - rng, center + rng, 4), dec = decimals(tk.step);
+      const tk = ticks(center - rng, center + rng, L.wide ? 4 : 3), dec = decimals(tk.step);
       const sig = tk.vals.map((v) => v.toFixed(dec)).join("|");
-      if (sig !== G.sig || !R.axisTicks.firstChild) { G.sig = sig; R.axisTicks.innerHTML = tk.vals.map((v) => `<line x1="${px(v).toFixed(1)}" x2="${px(v).toFixed(1)}" y1="${ay + 1}" y2="${ay + 6}" stroke="${RULE}"/><text x="${px(v).toFixed(1)}" y="${ay + 27}" font-size="11.5" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`).join(""); }
+      if (sig !== G.sig || !R.axisTicks.firstChild) { G.sig = sig; R.axisTicks.innerHTML = tk.vals.map((v) => `<line x1="${px(v).toFixed(1)}" x2="${px(v).toFixed(1)}" y1="${ay + 1}" y2="${ay + 6}" stroke="${RULE}"/><text x="${px(v).toFixed(1)}" y="${ay + 27}" font-size="13" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`).join(""); }
       R.exactLabel.innerHTML = Number.isFinite(cfg.exact) ? `exact price <tspan font-weight="700">${cfg.exact.toFixed(2)}</tspan>` : "exact price";
       const mx = (gx0 + gx1) / 2;
       R.band.setAttribute("x", (Number.isFinite(cfg.exact) ? px(cfg.exact) : mx) - 4);
@@ -637,13 +637,13 @@ const Board = (() => {
           R.stockNeedle.setAttribute("transform", `translate(${sn.toFixed(2)} 0)`); R.stockNeedle.setAttribute("opacity", "1");
           const pm = Number.isFinite(meanPay()) ? px(meanPay()) : NaN, ar = R.arrow;
           if (Number.isFinite(pm) && Number.isFinite(G.needle) && Math.abs(pm - G.needle) > 6) {
-            const ay2 = ay + 12, dir = Math.sign(G.needle - pm);
+            const ay2 = ay - 46, dir = Math.sign(G.needle - pm);
             const ln = ar.firstChild; ln.setAttribute("x1", pm); ln.setAttribute("x2", G.needle - dir * 6); ln.setAttribute("y1", ay2); ln.setAttribute("y2", ay2);
             ar.childNodes[1].setAttribute("d", `M${G.needle} ${ay2} L${G.needle - dir * 8} ${ay2 - 4} L${G.needle - dir * 8} ${ay2 + 4} Z`);
             const t = ar.childNodes[2], lft = Math.min(pm, G.needle) > gx0 + 90; t.setAttribute("text-anchor", "middle"); t.setAttribute("x", ((pm + G.needle) / 2).toFixed(1)); t.setAttribute("y", ay2 - 5);
             ar.setAttribute("opacity", "1");
           } else ar.setAttribute("opacity", "0");
-          const stk = R.stockTicks; if (!stk.firstChild) stk.appendChild(el("text", { x: gx1, y: L.ycLab, "font-size": "11.5", fill: ORANGE_D, "text-anchor": "end" }));
+          const stk = R.stockTicks; if (!stk.firstChild) stk.appendChild(el("text", { x: gx1, y: L.ycLab, "font-size": "13", fill: ORANGE_D, "text-anchor": "end" }));
           stk.firstChild.textContent = "E[C] = " + known.toFixed(2);
         } else { R.stockNeedle.setAttribute("opacity", "0"); R.arrow.setAttribute("opacity", "0"); }
       }
@@ -653,10 +653,10 @@ const Board = (() => {
     // the tape: the estimate against n, running down, on the gauge's own scale
     function tape(px, tv, plain) {
       const nMax = Math.max(500, S.planned), Y = (n) => (n / nMax) * L.tapeH, X = (v) => px.raw(v) - L.gx0, ex = cfg.exact, has = Number.isFinite(ex);
-      const sig = nMax + "|" + L.tapeH, txt = (y, t) => `<text x="9" y="${y.toFixed(1)}" font-size="11" fill="${MUTE}" stroke="#fafbfc" stroke-width="3" paint-order="stroke" stroke-linejoin="round">${t}</text>`;
+      const sig = nMax + "|" + L.tapeH, txt = (y, t) => `<text x="9" y="${y.toFixed(1)}" font-size="13" fill="${MUTE}" stroke="#fafbfc" stroke-width="3" paint-order="stroke" stroke-linejoin="round">${t}</text>`;
       if (G.tsig !== sig || !R.tTicks.firstChild) {
         G.tsig = sig;
-        R.tTicks.innerHTML = ticks(0, nMax, 4).vals.filter((v) => v > 0.06 * nMax && v < nMax * 0.97).map((v) => `<line x1="0" x2="5" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="${GHOST}"/>` + txt(Y(v) + 4, fmtN(v))).join("") + txt(L.tapeH - 9, "n paths, running down");
+        R.tTicks.innerHTML = ticks(0, nMax, 4).vals.filter((v) => v > 0.06 * nMax && v < nMax * 0.97).map((v, i) => `<line x1="0" x2="5" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="${GHOST}"/>` + txt(Y(v) + 4, (i ? "" : "n = ") + fmtN(v))).join("");
       }
       R.tExact.setAttribute("opacity", has ? "1" : "0");
       if (has) { R.tExact.setAttribute("x1", X(ex)); R.tExact.setAttribute("x2", X(ex)); }
