@@ -119,7 +119,7 @@ function rail() {
   const row = (cls, name, x) => `<tr class="${cls}"><th scope="row">${name}</th><td>${x.price[0].toFixed(dig)}</td><td>±${(1.96 * x.real).toPrecision(2)}</td></tr>`;
   $("result").innerHTML = `<thead><tr><th></th><th scope="col">Price</th><th scope="col">95% error</th></tr></thead><tbody>` + row("", "One plain run", p) + (sel ? row("sel", `One ${word(sel)} run`, e) : "") + `<tr class="exact"><th scope="row">Exact, ${KIND[spec.product]}</th><td>${ref.toFixed(dig)}</td><td></td></tr></tbody>`;
   const runs = `${e.reps} runs of ${state.base.n.toLocaleString("en")} paths`;
-  $("check").innerHTML = biased(spec) ? `Measured over ${runs}. This estimator is biased, so its error is measured about its own average; the bias is below.` : `Over ${runs}, its 95% intervals held the exact price <b>${Math.round(100 * e.cov)}%</b> of the time, and the error it reports is <b>${Math.round(100 * e.calib)}%</b> of the spread actually seen.`;
+  $("check").innerHTML = biased(spec) ? `Measured over ${runs}. This estimator is biased, so its error is measured about its own average; the bias is below.` : `Over ${runs}, its 95% intervals held the exact price <b>${Math.round(100 * e.cov)}%</b> of the time (±${Math.round(196 * Math.sqrt(0.0475 / e.reps))} from noise), and the error it reports is <b>${Math.round(100 * e.calib)}%</b> of the spread actually seen.`;
   const rows = [...state.results].sort((a, b) => b[1].vrf - a[1].vrf), top = Math.max(...rows.map(([, r]) => r.vrf));
   const span = Math.log(Math.max(top, 1.5));
   $("rank-note").textContent = biased(spec) ? `${rows.length}, by variance reduction` : `${rows.length}, fewest paths first`;
@@ -137,6 +137,9 @@ function rail() {
   const c = [trouble(), bias()].filter(Boolean).join(" ");
   $("caveat").innerHTML = c ? `<b>Read this.</b> ${c}` : "";
   $("caveat").hidden = !c;
+  const sel_ = $("ranking").querySelector('[aria-pressed="true"]'), rl = document.querySelector(".rail");
+  if (sel_ && matchMedia("(min-width: 921px)").matches) sel_.scrollIntoView({ block: "nearest" });
+  rl.classList.toggle("more", rl.scrollHeight - rl.scrollTop > rl.clientHeight + 4);
 }
 const biased = (s) => s.product === "american" || (s.product === "barrier" && s.mode !== "bridge");
 function bias() {
@@ -147,8 +150,9 @@ function bias() {
   return "";
 }
 function trouble() {
-  const low = [...state.results].filter(([, r]) => r.short);
-  return low.length ? `Reported errors are too small for ${low.map(([f, r]) => `${word(f)} (${Math.round(100 * r.calib)}% of the real spread)`).join(", ")}, so the spread that actually occurred is used${state.spec.product === "merton" ? ": jumps are too rare for a short run to see" : ""}.` : "";
+  const low = [...state.results].filter(([, r]) => r.short), e = state.results.get(pick(state.spec));
+  const off = e && !biased(state.spec) && e.cov < 0.95 - 1.96 * Math.sqrt(0.0475 / e.reps) ? `Its intervals held the exact price only ${Math.round(100 * e.cov)}% of the time, below 95% by more than noise, so its runs may be slightly off centre. ` : "";
+  return off + (low.length ? `Reported errors are too small for ${low.map(([f, r]) => `${word(f)} (${Math.round(100 * r.calib)}% of the real spread)`).join(", ")}, so the spread that actually occurred is used${state.spec.product === "merton" ? ": jumps are too rare for a short run to see" : ""}.` : "");
 }
 
 function drawKeys() {
@@ -267,6 +271,7 @@ function tabs(host, attr, act) { // arrow keys move between tabs, as the ARIA pa
 }
 
 (async function main() {
+  document.querySelector(".rail").addEventListener("scroll", (e) => { const r = e.target; r.classList.toggle("more", r.scrollHeight - r.scrollTop > r.clientHeight + 4); });
   $("i-ticker").innerHTML = Object.keys(window.MARKET).map((t) => `<option>${t}</option>`).join("");
   document.querySelectorAll(".sheet input[type=number]").forEach(scrub);
   const start = location.hash.slice(1);

@@ -142,7 +142,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .refs { font-size: 12.5px; color: var(--ink-3); max-width: 100ch; border-top: 1px solid var(--rule); padding-top: 14px; margin: 0; }
 
 /* ------------------------------------------------------------ rail */
-.rail { display: flex; flex-direction: column; gap: 20px; padding: 16px 20px 20px; overflow: auto; min-height: 0; }
+.rail { display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 20px; overflow: auto; min-height: 0; }
 .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .key { --c: var(--ink); align-content: center; min-height: 58px; display: grid; grid-template-columns: 30px 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-align: left; padding: 9px 10px; border: 1px solid var(--rule-2); border-radius: 9px; background: var(--paper); transition: border-color .2s, background .25s var(--ease), transform .12s; }
 .key:hover { border-color: var(--ink-4); }
@@ -180,7 +180,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .rank h3 { font-size: 13.5px; margin: 0 0 6px; }
 .rank h3 span { font-weight: 400; color: var(--ink-3); }
 #ranking { list-style: none; margin: 0 -8px; padding: 0; }
-#ranking button { width: 100%; display: grid; grid-template-columns: 88px 1fr 64px; align-items: center; gap: 10px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; text-align: left; transition: background .15s; }
+#ranking button { width: 100%; display: grid; grid-template-columns: 88px 1fr 64px; align-items: center; gap: 10px; height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: none; text-align: left; transition: background .15s; }
 #ranking button:hover { background: var(--shell); }
 #ranking button[aria-pressed="true"] { background: var(--well); }
 #ranking .name { display: none; }
@@ -190,6 +190,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 #ranking button[aria-pressed="true"] .track i { background: var(--ink); }
 .x { font-size: 13px; text-align: right; color: var(--ink); }
 .x.worse { color: var(--red); }
+.rail.more { mask-image: linear-gradient(#000 calc(100% - 36px), transparent); }
 .caveat { margin: 0; font-size: 12.5px; line-height: 1.5; padding: 10px 12px; border: 1px solid #ecd3ad; background: #fdf6ea; border-radius: 8px; color: #4d3511; }
 body.busy .verdict, body.busy .rank, body.busy[data-view=race] .stage { opacity: .5; }
 .stage { transition: opacity .25s; }
@@ -207,7 +208,10 @@ body.busy .verdict, body.busy .rank, body.busy[data-view=race] .stage { opacity:
   body { height: auto; min-height: 0; }
   .work { display: flex; flex-direction: column; }
   .rail { display: contents; }
-  .keys { order: -1; padding: 14px 20px 4px; }
+  .keys, .verdict { order: -1; }
+  .keys { padding: 14px 20px 4px; }
+  .verdict { padding-bottom: 16px; border-bottom: 1px solid var(--rule); }
+  .rail.more { mask-image: none; }
   .plot { border-right: 0; border-bottom: 1px solid var(--rule); }
   .stage { height: max(360px, 56svh); }
   .verdict, .rank { padding: 18px 20px 0; }
