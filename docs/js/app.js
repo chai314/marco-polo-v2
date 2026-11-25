@@ -80,6 +80,10 @@ async function recompute(mode) {
   drawKeys();
   document.body.classList.add("busy");
   if (state.view === "paths") show(mode || "fresh"); // paths need no prices
+  else if (state.view === "race" && mode === "fresh" && state.priced?.product !== spec.product) { // another product: the old funnel would mislead
+    Ink.clear(); $("marks").innerHTML = ""; $("tools").innerHTML = ""; $("caption").textContent = "";
+    $("wait").textContent = "Pricing every combination"; $("wait").hidden = false;
+  }
   const flags = [];
   for (let f = 0; f < 16; f++) if (!(f & ~allowed(spec))) flags.push(f);
   const work = flags.length * state.base.n * (flat(spec.product) ? 2 : spec.m), reps = Math.max(40, Math.min(384, Math.floor(1e8 / work)));
@@ -108,7 +112,9 @@ function rail() {
   drawKeys();
   $("status-text").textContent = `${badge()} · ${state.engine}`;
   const d = sel ? `<span class="dots">${dots(sel)}</span>` : "";
-  $("finding").innerHTML = !sel ? "Plain Monte Carlo, the yardstick" : e.vrf < 0.95 ? `${d} is worse than plain here` : e.vrf < 1.08 ? `${d} makes no real difference here` : `${d} needs <b>${big(e.vrf)}×</b> fewer paths for the same error`;
+  // a biased estimator keeps its bias however many paths it gets, so only the variance factor is claimed
+  const gap = Math.abs(e.mean - ref);
+  $("finding").innerHTML = !sel ? "Plain Monte Carlo, the yardstick" : biased(spec) && e.vrf >= 1.08 ? `${d} cuts the variance <b>${big(e.vrf)}×</b>, but a bias of ${gap.toPrecision(2)} stays` : e.vrf < 0.95 ? `${d} is worse than plain here` : e.vrf < 1.08 ? `${d} makes no real difference here` : `${d} needs <b>${big(e.vrf)}×</b> fewer paths for the same error`;
   const dig = Math.max(2, Math.min(6, 2 - Math.floor(Math.log10(Math.max(e.real, 1e-9)))));
   const row = (cls, name, x) => `<tr class="${cls}"><th scope="row">${name}</th><td>${x.price[0].toFixed(dig)}</td><td>±${(1.96 * x.real).toPrecision(2)}</td></tr>`;
   $("result").innerHTML = `<thead><tr><th></th><th scope="col">Price</th><th scope="col">95% error</th></tr></thead><tbody>` + row("", "One plain run", p) + (sel ? row("sel", `One ${word(sel)} run`, e) : "") + `<tr class="exact"><th scope="row">Exact, ${KIND[spec.product]}</th><td>${ref.toFixed(dig)}</td><td></td></tr></tbody>`;
@@ -116,7 +122,7 @@ function rail() {
   $("check").innerHTML = biased(spec) ? `Measured over ${runs}. This estimator is biased, so its error is measured about its own average; the bias is below.` : `Over ${runs}, its 95% intervals held the exact price <b>${Math.round(100 * e.cov)}%</b> of the time, and the error it reports is <b>${Math.round(100 * e.calib)}%</b> of the spread actually seen.`;
   const rows = [...state.results].sort((a, b) => b[1].vrf - a[1].vrf), top = Math.max(...rows.map(([, r]) => r.vrf));
   const span = Math.log(Math.max(top, 1.5));
-  $("rank-note").textContent = `${rows.length}, fewest paths first`;
+  $("rank-note").textContent = biased(spec) ? `${rows.length}, by variance reduction` : `${rows.length}, fewest paths first`;
   $("ranking").innerHTML = rows.map(([f, r]) => {
     const w = r.vrf >= 1 ? Math.max(0.6, (100 * Math.log(r.vrf)) / span) : 0;
     return `<li><button type="button" data-f="${f}" aria-pressed="${f === sel}" aria-label="${word(f)}: ${f ? big(r.vrf) + " times fewer paths" : "the yardstick"}"><span class="dots">${f ? dots(f) : '<i class="dot P">–</i>'}</span><span class="name">${f ? word(f) : "Plain"}</span><span class="track"><i style="width:${w.toFixed(1)}%"></i></span><span class="x${r.vrf < 0.95 ? " worse" : ""}">${f ? (r.vrf < 0.95 ? "worse" : big(r.vrf) + "×") : "1×"}</span></button></li>`;

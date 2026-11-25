@@ -52,7 +52,7 @@ const Views = (() => {
       for (const [n, v] of r) if (n >= n0 * 0.97) pts.push(X(n), clampY(Y(v)));
       return { pts, color, alpha, width };
     };
-    const band = sel ? (2 * 1.96 * c.real / half) * (B.h / 2) : 99, thin = band < 28, both = mine ? [[plain, GREY, z ? 0.14 : 0.3, 1], [mine, INK, thin ? 0.2 : 0.5, thin ? 0.8 : 1.15]] : [[plain, INK, 0.36, 1.1]];
+    const band = sel ? (2 * 1.96 * c.real / half) * (B.h / 2) : 99, thin = band < 28, both = mine ? [[plain, GREY, z ? 0.14 : 0.3, 1], [mine, INK, thin ? 0.13 : 0.5, thin ? 0.7 : 1.15]] : [[plain, INK, 0.36, 1.1]];
     const ready = [];
     both.forEach(([e, col, a, w]) => e.got.forEach((r) => { if (r) ready.push(line(r, col, a, w)); }));
     const morph = ctx.mode === "zoom" && both.every(([e]) => e.got.every(Boolean));
@@ -61,7 +61,7 @@ const Views = (() => {
     both.forEach(([e, col, a, w]) => e.list.forEach((pr, i) => {
       if (e.got[i]) return;
       pending++;
-      pr.then((r) => { if (ctx.alive()) Ink.add([{ ...line(r, col, a, w), delay: 0 }]); }, () => {});
+      pr.then((r) => { if (!ctx.alive()) return; Ink.add([{ ...line(r, col, a, w), delay: 0 }]); const t = document.getElementById("runs-lab"); if (t) t.textContent = label(); }, () => {});
     }));
 
     // marks
@@ -82,7 +82,8 @@ const Views = (() => {
     if (sel) labels.push({ y: clampY(Y(ref - 1.959964 * c.real)), t: `${word(sel)} ±${(1.96 * c.real).toPrecision(2)}`, sub: "", cls: "b" });
     labels.sort((a, b) => a.y - b.y).forEach((l, i, a) => { if (i) l.y = Math.max(l.y, a[i - 1].y + (a[i - 1].sub ? 32 : 18)); });
     if (!small) for (const l of labels) if (l.y > B.y - 2 && l.y < B.y + B.h + 2) s += text(R, l.y + 4, esc(l.t), "lab " + l.cls) + (l.sub ? text(R, l.y + 18, esc(l.sub), "lab sub") : "");
-    s += text(B.x, B.y - 12, `Running estimate of ${plain.got.length} independent runs${sel ? " of each" : ""}`, "lab sub");
+    const total = both.reduce((t, [e]) => t + e.list.length, 0), label = () => { const k = both.reduce((t, [e]) => t + e.got.filter(Boolean).length, 0); return `Running estimate of ${plain.got.length} independent runs${sel ? " of each" : ""}` + (k < total ? `, ${k} of ${total} landed` : ""); };
+    s += `<text id="runs-lab" x="${B.x}" y="${B.y - 12}" class="lab sub">${label()}</text>`;
     s += `<g id="cursor" class="cursor" hidden><line y1="${B.y}" y2="${B.y + B.h}"/><g class="readout"><rect rx="6" height="${sel ? 58 : 40}"/><text class="r0" y="17"></text><text class="r1" y="35"></text><text class="r2" y="52"></text></g></g><rect class="hover" x="${B.x}" y="${B.y}" width="${B.w}" height="${B.h}"/>`;
     svg().innerHTML = s;
     const cur = document.getElementById("cursor"), at = (e, n) => { // the spread seen across the runs near n paths

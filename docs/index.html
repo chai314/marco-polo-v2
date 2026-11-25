@@ -33,10 +33,10 @@
       <label class="f num"><span>Spot</span><input id="i-S0" type="number" min="0.01" step="any" data-step="1" inputmode="decimal"></label>
       <label class="f num"><span>Strike</span><input id="i-K" type="number" min="0.01" step="any" data-step="1" inputmode="decimal"></label>
       <label class="f num"><span>Years</span><input id="i-T" type="number" min="0.05" max="3" step="any" data-step="0.05" value="0.5" inputmode="decimal"></label>
-      <label class="f" data-for="barrier"><span>Barrier</span><select id="i-knock"><option value="out">Knock out</option><option value="in">Knock in</option></select></label>
+      <label class="f" data-for="barrier"><span>Knock</span><select id="i-knock"><option value="out">Out</option><option value="in">In</option></select></label>
       <label class="f" data-for="barrier"><span>Direction</span><select id="i-direction"><option value="down">Down</option><option value="up">Up</option></select></label>
       <label class="f num" data-for="barrier"><span>Level</span><input id="i-H" type="number" min="0.01" step="any" data-step="1" inputmode="decimal"></label>
-      <label class="f" data-for="barrier"><span>Monitoring</span><select id="i-mode"><option value="bridge">Brownian bridge</option><option value="naive">Naive grid</option><option value="shifted">Shifted grid</option></select></label>
+      <label class="f" data-for="barrier"><span>Monitoring</span><select id="i-mode"><option value="bridge">Bridge</option><option value="naive">Naive grid</option><option value="shifted">Shifted grid</option></select></label>
       <label class="f" data-for="asian barrier"><span>Dates</span><select id="i-m"><option>5</option><option>12</option><option>25</option><option selected>50</option><option>100</option><option>252</option></select></label>
       <label class="f" data-for="american"><span>Exercise dates</span><select id="i-dates"><option>50</option><option>24</option><option>12</option><option>4</option><option>2</option></select></label>
     </fieldset>
