@@ -527,7 +527,7 @@ const Board = (() => {
       // ticks
       const tk = ticks(center - rng, center + rng, 4), dec = decimals(tk.step);
       const sig = tk.vals.map((v) => v.toFixed(dec)).join("|");
-      if (sig !== G.sig) { G.sig = sig; R.axisTicks.innerHTML = tk.vals.map((v) => `<line x1="${px(v).toFixed(1)}" x2="${px(v).toFixed(1)}" y1="${ay + 1}" y2="${ay + 6}" stroke="${RULE}"/><text x="${px(v).toFixed(1)}" y="${ay + 27}" font-size="11.5" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`).join(""); }
+      if (sig !== G.sig || !R.axisTicks.firstChild) { G.sig = sig; R.axisTicks.innerHTML = tk.vals.map((v) => `<line x1="${px(v).toFixed(1)}" x2="${px(v).toFixed(1)}" y1="${ay + 1}" y2="${ay + 6}" stroke="${RULE}"/><text x="${px(v).toFixed(1)}" y="${ay + 27}" font-size="11.5" fill="${MUTE}" text-anchor="middle">${esc(v.toLocaleString("en", { minimumFractionDigits: dec, maximumFractionDigits: dec }))}</text>`).join(""); }
       R.exactLabel.innerHTML = Number.isFinite(cfg.exact) ? `true price <tspan font-weight="700">${cfg.exact.toFixed(2)}</tspan>` : "true price";
       const mx = (gx0 + gx1) / 2;
       R.band.setAttribute("x", (Number.isFinite(cfg.exact) ? px(cfg.exact) : mx) - 4);
