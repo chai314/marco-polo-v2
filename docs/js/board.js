@@ -7,10 +7,10 @@
 
 const Board = (() => {
   const NP = 2048, FONT = 'Heros, "Helvetica Neue", Helvetica, Arial, sans-serif', NS = "http://www.w3.org/2000/svg";
-  const INK = "#14171a", PALE = "#b9bfc6", SKY = "#a9c0ea", MUTE = "#5f666f", PIN = "#d3d7dc", RULE = "#c9ced4", GHOST = "#8a9097";
-  const BLUE = "#1657c9", GREEN = "#10936a", GREEN_D = "#0b6b4d", ORANGE = "#ec6a00", ORANGE_D = "#b34e00", VIOLET = "#a8328f", RED = "#bf3a2f", YELLOW = "#f2c200";
-  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
-  const C = { ink: rgb(INK), pale: rgb(PALE), sky: rgb(SKY), pin: rgb(PIN), pinHot: rgb("#6b727b"), blue: rgb(BLUE), red: rgb(RED), violet: rgb(VIOLET), ghost: rgb("#9aa0a7") };
+  const P = PALETTE, INK = P.ink, PALE = P.pale, SKY = P.sky, MUTE = P.mute, PIN = P.pin, RULE = P.rule, GHOST = P.ghost;
+  const BLUE = P.A, GREEN = P.S, GREEN_D = P.Sdark, ORANGE = P.C, ORANGE_D = P.Cdark, VIOLET = P.K, RED = P.red, YELLOW = P.truth;
+  const rgb = P.rgb;
+  const C = { ink: rgb(INK), pale: rgb(PALE), sky: rgb(SKY), pin: rgb(PIN), pinHot: rgb(P.pinHot), blue: rgb(BLUE), red: rgb(RED), violet: rgb(VIOLET), ghost: rgb(P.ghost) };
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const isFlat = (p) => p === "european" || p === "merton";
   const fmtN = (n) => Math.round(n).toLocaleString("en");
@@ -309,7 +309,7 @@ const Board = (() => {
       s += `<g data-r="needle" opacity="0"><line y1="${ay - 34}" y2="${ay}" stroke="${INK}" stroke-width="2"/><path d="M-4 ${ay - 42} L4 ${ay - 42} L0 ${ay - 34} Z" fill="${INK}"/></g>`;
       s += `<text data-r="needleLabel" y="${ay - 35}" font-size="13" font-weight="700" fill="${INK}" text-anchor="start" opacity="0" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text>`;
       if (f.C) s += `<g data-r="arrow" opacity="0"><line stroke="${ORANGE}" stroke-width="2"/><path fill="${ORANGE}"/><text font-size="13" fill="${ORANGE_D}" text-anchor="middle" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">\u2212\u03b2(C\u0304 \u2212 E[C])</text></g>`;
-      if (L.wide) s += `<svg x="${g0}" y="${L.tapeY}" width="${x1 - g0}" height="${L.tapeH}" overflow="hidden"><rect width="100%" height="100%" fill="#fafbfc"/><path data-r="tBand" fill="${INK}" fill-opacity=".07"/><line data-r="tExact" y1="0" y2="${L.tapeH}" stroke="${YELLOW}" stroke-width="3"/><path data-r="tPlain" fill="none" stroke="${GHOST}" stroke-width="1.1" stroke-dasharray="3 3"/><path data-r="tMine" fill="none" stroke="${INK}" stroke-width="1.1" stroke-dasharray="3 3"/><path data-r="tCmp" fill="none" stroke="${GHOST}" stroke-width="1.3" stroke-linejoin="round"/><path data-r="tRun" fill="none" stroke="${INK}" stroke-width="1.7" stroke-linejoin="round"/><circle data-r="tDot" r="4" fill="${INK}" opacity="0"/><g data-r="tTicks"></g></svg>`;
+      if (L.wide) s += `<svg x="${g0}" y="${L.tapeY}" width="${x1 - g0}" height="${L.tapeH}" overflow="hidden"><rect width="100%" height="100%" fill="${P.tape}"/><path data-r="tBand" fill="${INK}" fill-opacity=".07"/><line data-r="tExact" y1="0" y2="${L.tapeH}" stroke="${YELLOW}" stroke-width="3"/><path data-r="tPlain" fill="none" stroke="${GHOST}" stroke-width="1.1" stroke-dasharray="3 3"/><path data-r="tMine" fill="none" stroke="${INK}" stroke-width="1.1" stroke-dasharray="3 3"/><path data-r="tCmp" fill="none" stroke="${GHOST}" stroke-width="1.3" stroke-linejoin="round"/><path data-r="tRun" fill="none" stroke="${INK}" stroke-width="1.7" stroke-linejoin="round"/><circle data-r="tDot" r="4" fill="${INK}" opacity="0"/><g data-r="tTicks"></g></svg>`;
       return s;
     }
 
@@ -324,7 +324,7 @@ const Board = (() => {
       if (sh.pins !== false && !L.snap) { // paths drawn exactly get date lines instead of pins
         const p = new Path2D();
         for (let k = 1; k <= L.nr; k++) { const y = Math.round(rowY(k)) + 0.5; p.moveTo(L.x0, y); p.lineTo(L.x1, y); }
-        bctx.strokeStyle = "#e9ecef"; bctx.lineWidth = 1; bctx.stroke(p);
+        bctx.strokeStyle = P.dateLine; bctx.lineWidth = 1; bctx.stroke(p);
       }
       if (gl) return; // pins and heap are drawn with the balls
       if (sh.pins !== false && L.snap) { const p = new Path2D(); eachPeg((x, y) => { p.moveTo(x + 2.2, y); p.arc(x, y, 2.2, 0, 6.2832); }); bctx.fillStyle = PIN; bctx.fill(p); }
@@ -593,7 +593,7 @@ const Board = (() => {
       R.band.setAttribute("x", (Number.isFinite(cfg.exact) ? px(cfg.exact) : mx) - 4);
       const plain = !cfg.sel, letters = ["A", "C", "S", "K"].filter((l) => L.f[l]).join("+");
       R.gLabel.textContent = plain || !letters ? "Discounted average payoff" : `Estimate with ${letters}`;
-      R.gNote.textContent = plain || !letters ? "" : `engine estimate at n = ${fmtN(Math.min(S.count, trace?.length ? trace[trace.length - 1][0] : S.count))}`;
+      R.gNote.textContent = plain || !letters || !S.count ? "" : `engine estimate at n = ${fmtN(Math.min(S.count, trace?.length ? trace[trace.length - 1][0] : S.count))}`;
       let tv = plain ? meanPay() : traceAt(trace, S.count);
       if (!Number.isFinite(tv)) tv = meanPay();
       R.value.textContent = Number.isFinite(tv) && S.count ? tv.toFixed(2) : "\u2013";
@@ -653,7 +653,7 @@ const Board = (() => {
     // the tape: the estimate against n, running down, on the gauge's own scale
     function tape(px, tv, plain) {
       const nMax = Math.max(500, S.planned), Y = (n) => (n / nMax) * L.tapeH, X = (v) => px.raw(v) - L.gx0, ex = cfg.exact, has = Number.isFinite(ex);
-      const sig = nMax + "|" + L.tapeH, txt = (y, t) => `<text x="9" y="${y.toFixed(1)}" font-size="13" fill="${MUTE}" stroke="#fafbfc" stroke-width="3" paint-order="stroke" stroke-linejoin="round">${t}</text>`;
+      const sig = nMax + "|" + L.tapeH, txt = (y, t) => `<text x="9" y="${y.toFixed(1)}" font-size="13" fill="${MUTE}" stroke="${P.tape}" stroke-width="3" paint-order="stroke" stroke-linejoin="round">${t}</text>`;
       if (G.tsig !== sig || !R.tTicks.firstChild) {
         G.tsig = sig;
         R.tTicks.innerHTML = ticks(0, nMax, 4).vals.filter((v) => v > 0.06 * nMax && v < nMax * 0.97).map((v, i) => `<line x1="0" x2="5" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="${GHOST}"/>` + txt(Y(v) + 4, (i ? "" : "n = ") + fmtN(v))).join("");

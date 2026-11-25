@@ -223,7 +223,7 @@
     s.style.overflow = "visible";
     const tr = reduced() ? "none" : "transform 500ms ease", mid = LEFT + (cloud.W - LEFT - RIGHT) / 2;
     cloud.mid = mid;
-    cloud.line = svgEl("line", { x1: mid, x2: mid, y1: 18, y2: CH - 6, stroke: "#f2c200", "stroke-width": 3 }, s);
+    cloud.line = svgEl("line", { x1: mid, x2: mid, y1: 18, y2: CH - 6, stroke: PALETTE.truth, "stroke-width": 3 }, s);
     cloud.tag = svgEl("text", { x: mid + 7, y: 12, class: "lab" }, s);
     cloud.tag.textContent = "exact price";
     cloud.rows = ROWS.map((n, r) => {
@@ -231,11 +231,11 @@
       const name = svgEl("text", { x: 0, y: y + 4, class: "lab" }, g);
       name.textContent = `N = ${n.toLocaleString("en")}`;
       const dots = Array.from({ length: DOTS }, (_, i) => {
-        const c = svgEl("circle", { r: 3.5, cx: 0, cy: 0, fill: "#14171a", "fill-opacity": 0.55 }, g), dy = y - 13 + 22 * jit(i * 7 + r);
+        const c = svgEl("circle", { r: 3.5, cx: 0, cy: 0, fill: PALETTE.ink, "fill-opacity": 0.55 }, g), dy = y - 13 + 22 * jit(i * 7 + r);
         c.style.transition = tr; c.dataset.y = dy; c.style.transform = `translate(${mid}px, ${dy}px)`;
         return c;
       });
-      const brk = svgEl("path", { d: "M0 0V6H1V0", fill: "none", stroke: "#14171a", "stroke-width": 1.4, "vector-effect": "non-scaling-stroke" }, g);
+      const brk = svgEl("path", { d: "M0 0V6H1V0", fill: "none", stroke: PALETTE.ink, "stroke-width": 1.4, "vector-effect": "non-scaling-stroke" }, g);
       brk.style.transition = tr; brk.style.transform = `translate(${mid}px, ${y + 14}px) scaleX(0)`;
       const lab = svgEl("text", { x: cloud.W, y: y + 2, class: "lab b", "text-anchor": "end" }, g);
       const theory = svgEl("text", { x: cloud.W, y: y + 17, class: "lab sub", "text-anchor": "end" }, g);
