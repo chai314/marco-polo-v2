@@ -49,7 +49,7 @@ const Views = (() => {
       if (!ctx.alive()) return;
       galton.setTrace(mine, word(sel));
       galton.setCompare(sel ? plain : null);
-      if (galton.count === 0) run(base.n >= 2000 ? 2000 : 1000); // an empty board teaches nothing: fill it
+      if (galton.count === 0 && !galton.filling) { galton.filling = true; run(base.n >= 2000 ? 2000 : 1000).finally(() => { galton.filling = false; }); } // an empty board teaches nothing: fill it
     } catch (e) { if (e.message !== "stale") throw e; }
   }
 

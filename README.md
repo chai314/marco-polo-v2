@@ -16,14 +16,18 @@ On GitHub Pages it is served from the `docs/` folder.
 
 ## What is on the page
 
-- **Term sheet** across the top: product (European, Asian, barrier, American), contract, model and budget. Drag a number's label sideways to scrub it, or type.
-- **Convergence**: 64 independent runs of plain Monte Carlo (grey) and 64 of the chosen combination (ink), each drawn as its running estimate while paths are added, against the exact price and the ±1.96 standard-error funnel. Hover the chart for the spread actually seen at that path count, next to the theory.
-- **Paths**: 2,048 paths from the engine's own generator, coloured by outcome, with the mechanism of each method drawn in. Drag spot, strike, barrier and volatility.
-- **Market**: the option chain's implied-volatility smile against the Merton fit, two years of closes and the fat tails of daily returns. Each quote is then repriced by Monte Carlo with the fit and checked against its bid and ask.
-- **Method**: what each method does, and why it helps or does not on this product.
-- **Result**: the four method keys (also `a`, `c`, `s`, `k`), how many times fewer paths the chosen combination needs, and every combination ranked.
+**The story.** A guided walk through a Galton board, the bean machine that turns randomness into a bell curve. Every ball is one simulated future of the stock: it falls through the pins along its real simulated path and lands at its price on expiry day. The option's price is the average payoff, and a needle under the board shows that average settling on the true price (the yellow bar). Chapters then bolt on one trick at a time, each with its own gadget on the board:
 
-Lines are drawn by a small WebGL2 renderer (`docs/js/ink.js`, instanced line segments) with a Canvas 2D fallback; add `?canvas` to the URL to see the fallback.
+- **A, mirror twins** (antithetic variates): every ball is dropped with a twin that gets the opposite nudge at every pin.
+- **S, a fair share for every lane** (stratification): the landing zone is cut into 32 equally likely lanes, and each gets the same number of balls.
+- **C, an answer key** (control variate): the stock's own average, whose true value is known, corrects the option's estimate.
+- **K, skip the dice** (conditioning): with jumps, only the number of jumps is rolled; a formula does the rest.
+
+Each chapter reports, live, how much smaller the error gets for the same number of balls. The last chapter ranks all 15 combinations.
+
+**The lab.** Every product (European, Asian, barrier, American), stock and setting, with five views: the board, convergence of 64 runs against the exact price, the paths, the market data and its fitted jump model, and notes on each method. Drag a field's name sideways to scrub its number.
+
+The board (`docs/js/board.js`) and the line renderer (`docs/js/ink.js`) are small WebGL2 renderers with Canvas 2D fallbacks; add `?canvas` to the URL to see the fallback.
 
 ## How the headline is measured, and where it is weak
 
