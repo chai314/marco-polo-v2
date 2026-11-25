@@ -104,8 +104,17 @@
   all(".step").forEach((s) => s.classList.toggle("on", s.dataset.step === "hero"));
 
   let cloudStarted = false;
+  let auto = Promise.resolve(), singles = 0;
+  // a drop the page makes on its own; it never writes the lastBall readout
+  function autoDrop(n) {
+    auto = (async () => {
+      try { await cur.ready; lastDrop = n; await board.drop(n, { pace: "rain" }); } catch (e) { if (e && e.message !== "stale") console.error(e); }
+    })();
+    return auto;
+  }
   function onEnter(step) {
     if (step === "cost" && !cloudStarted) { cloudStarted = true; cloudPick(500); }
+    if (step === "mix" && board && board.count === 0) autoDrop(2000);
   }
 
   // ---------------------------------------------------------------- drop buttons
@@ -118,7 +127,9 @@
         b.setAttribute("aria-busy", "true");
         try {
           if (step !== active) await setActive(step); else await cur.ready;
+          await auto; // let a drop the page started finish first
           lastDrop = n;
+          if (n === 1) singles++;
           await board.drop(n);
         } catch (e) { if (e && e.message !== "stale") console.error(e); } finally { b.removeAttribute("aria-busy"); }
       });
@@ -132,7 +143,8 @@
       const st = last(e.ST);
       if (!Number.isFinite(st)) return;
       const f = (x) => x.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      live("lastBall", st > K ? `This ball landed at ${f(st)}, so the option pays ${f(st - K)}.` : `This ball landed at ${f(st)}, below the strike, so the option pays nothing.`);
+      const ex = settled[cur ? cur.name : "GBM"], wild = singles === 1 && Number.isFinite(ex) ? ` One ball is a wild guess: the true price is ${f(ex)}.` : "";
+      live("lastBall", (st > K ? `This ball landed at ${f(st)}, so the option pays ${f(st - K)}.` : `This ball landed at ${f(st)}, below the strike, so the option pays nothing.`) + wild);
     });
   }
 
@@ -231,6 +243,7 @@
       all("button[data-f]", host).forEach((x) => x.setAttribute("aria-pressed", x === b));
       cur = null; // the mix step now means a different combination
       await setActive("mix");
+      if (board.count === 0) autoDrop(2000);
     });
   }
 
@@ -244,6 +257,7 @@
     wireDrops();
     await setActive(active);
     onEnter(active);
+    if (active === "hero") autoDrop(240); // the hero comes alive once per page load (the board handles reduced motion)
     ranking().catch((e) => { if (e.message !== "stale") console.error(e); });
   })();
 })();
