@@ -17,7 +17,7 @@ const state = { product: "european", pick: {}, seeded: {}, gen: 0, view: "board"
 const letters = (f) => LETTERS.filter((l) => f & BIT[l]);
 const dots = (f) => letters(f).map((l) => `<i class="dot ${l}">${l}</i>`).join("");
 const word = (f) => letters(f).join("+") || "Plain";
-const big = (x) => (x >= 1e6 ? (x / 1e6).toPrecision(3) + " million" : x >= 10 ? Math.round(x).toLocaleString("en") : x.toFixed(1)); // one rule everywhere: 7.8, 13, 3,260
+const big = (x) => (x >= 1e6 ? (x / 1e6).toPrecision(3) + " million" : x >= 9.95 ? Math.round(x).toLocaleString("en") : x.toFixed(1)); // one rule everywhere: 7.8, 13, 3,260
 const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
 const minus = (s) => String(s).replace(/^-/, "−");
 const fail = (msg) => { $("error").textContent = msg; $("error").hidden = !msg; };
