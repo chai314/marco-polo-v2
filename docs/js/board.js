@@ -288,6 +288,7 @@ const Board = (() => {
       s += `<line x1="${g0}" x2="${x1}" y1="${ay + 0.5}" y2="${ay + 0.5}" stroke="${RULE}" stroke-width="1"/><g data-r="axisTicks"></g>`;
       s += `<rect data-r="band" x="${(g0 + x1) / 2 - 4}" y="${ay - 30}" width="8" height="30" fill="${YELLOW}"/>`;
       s += `<g data-r="ghosts"></g>`;
+      for (const k of ["off", "offCmp"]) s += `<g data-r="${k}" opacity="0"><line stroke="${k === "off" ? INK : GHOST}" stroke-width="1" stroke-dasharray="3 3"/><path fill="${k === "off" ? INK : GHOST}"/><text font-size="11.5" font-weight="700" fill="${k === "off" ? INK : GHOST}" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round"></text></g>`;
       if (f.C) s += `<g data-r="arrow" opacity="0"><line stroke="${ORANGE}" stroke-width="2"/><path fill="${ORANGE}"/><text font-size="11" fill="${ORANGE_D}" text-anchor="middle" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">\u2212 \u03b2 \u00d7 error</text></g>`;
       s += `<g data-r="cmp" opacity="0"><line y1="${ay - 26}" y2="${ay}" stroke="${GHOST}" stroke-width="2"/><path d="M-4 ${ay - 34} L4 ${ay - 34} L0 ${ay - 27} Z" fill="${GHOST}"/><text data-r="cmpLabel" x="-8" y="${ay - 27}" font-size="11.5" font-weight="700" fill="${GHOST}" text-anchor="end" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round">plain</text></g>`;
       s += `<g data-r="needle" opacity="0"><line y1="${ay - 34}" y2="${ay}" stroke="${INK}" stroke-width="2"/><path d="M-4 ${ay - 42} L4 ${ay - 42} L0 ${ay - 34} Z" fill="${INK}"/></g>`;
@@ -535,7 +536,19 @@ const Board = (() => {
       let tv = plain ? meanPay() : traceAt(trace, S.count);
       if (!Number.isFinite(tv)) tv = meanPay();
       R.value.textContent = Number.isFinite(tv) && S.count ? tv.toFixed(2) : "\u2013";
-      let target = Number.isFinite(tv) ? px(tv) : NaN, moving = false;
+      const pxr = (v) => gx0 + ((v - (center - rng)) / (2 * rng)) * (gx1 - gx0);
+      // a value off the axis gets an arrow at that end instead of a needle
+      const offMark = (g, v, text, y) => {
+        const raw = Number.isFinite(v) ? pxr(v) : 0;
+        if (!Number.isFinite(v) || (raw >= gx0 && raw <= gx1)) { g.setAttribute("opacity", "0"); return false; }
+        const left = raw < gx0, tip = left ? gx0 + 2 : gx1 - 2, d = left ? 1 : -1, base = tip + d * 9, [ln, ar, tx] = g.childNodes;
+        ar.setAttribute("d", `M${tip} ${y} L${base} ${y - 4.5} L${base} ${y + 4.5} Z`);
+        ln.setAttribute("x1", base); ln.setAttribute("x2", base + d * 22); ln.setAttribute("y1", y); ln.setAttribute("y2", y);
+        tx.textContent = text; tx.setAttribute("x", base + d * 27); tx.setAttribute("y", y + 4); tx.setAttribute("text-anchor", left ? "start" : "end");
+        g.setAttribute("opacity", "1"); return true;
+      };
+      const offMain = offMark(R.off, tv, Number.isFinite(tv) && S.count ? tv.toFixed(2) : "", ay - 20), offCmp = offMark(R.offCmp, traceAt(compare, S.count), `plain ${traceAt(compare, S.count).toFixed(1)}`, ay - 6);
+      let target = Number.isFinite(tv) && !offMain ? px(tv) : NaN, moving = false;
       if (Number.isFinite(target)) {
         if (!Number.isFinite(G.needle)) G.needle = target;
         const before = G.needle;
@@ -546,14 +559,14 @@ const Board = (() => {
         R.needle.setAttribute("transform", `translate(${G.needle.toFixed(2)} 0)`); R.needle.setAttribute("opacity", "1");
         const lab = R.needleLabel, right = G.needle > gx1 - 70; // the method name sits beside the needle
         lab.textContent = traceLabel; lab.setAttribute("x", (G.needle + (right ? -7 : 7)).toFixed(1)); lab.setAttribute("text-anchor", right ? "end" : "start"); lab.setAttribute("opacity", traceLabel ? "1" : "0");
-      } else { R.needle.setAttribute("opacity", "0"); G.trail.length = 0; G.needle = NaN; }
+      } else { R.needle.setAttribute("opacity", "0"); R.needleLabel.setAttribute("opacity", "0"); G.trail.length = 0; G.needle = NaN; }
       // ghost trail
       const gh = R.ghosts, n = G.trail.length;
       while (gh.childNodes.length < 30) gh.appendChild(el("line", { y1: ay - 34, y2: ay, stroke: INK, "stroke-width": "1" }));
       for (let k = 0; k < 30; k++) { const node = gh.childNodes[k], idx = n - 2 - k; if (idx >= 0) { node.setAttribute("x1", G.trail[idx].toFixed(1)); node.setAttribute("x2", G.trail[idx].toFixed(1)); node.setAttribute("opacity", (0.28 * (1 - k / 30)).toFixed(3)); } else node.setAttribute("opacity", "0"); }
       // compare needle
       const cv = traceAt(compare, S.count);
-      if (Number.isFinite(cv)) { R.cmp.setAttribute("transform", `translate(${px(cv).toFixed(2)} 0)`); R.cmp.setAttribute("opacity", "1"); const cl = R.cmpLabel, rt = px(cv) < gx0 + 50; cl.setAttribute("x", rt ? 8 : -8); cl.setAttribute("text-anchor", rt ? "start" : "end"); } else R.cmp.setAttribute("opacity", "0");
+      if (Number.isFinite(cv) && !offCmp) { R.cmp.setAttribute("transform", `translate(${px(cv).toFixed(2)} 0)`); R.cmp.setAttribute("opacity", "1"); const cl = R.cmpLabel, rt = px(cv) < gx0 + 50; cl.setAttribute("x", rt ? 8 : -8); cl.setAttribute("text-anchor", rt ? "start" : "end"); } else R.cmp.setAttribute("opacity", "0");
       // the answer key: discounted stock average against its known value
       if (L.f.C && R.stockNeedle) {
         const known = sp.S0 * Math.exp(-sp.q * sp.T), sdS = sdOf(S.sums.st, S.sums.st2, S.count), halfS = Math.max(3.5 * (Number.isFinite(sdS) ? sdS / Math.sqrt(S.count) : 0), known * 0.004), sx = (v) => clamp(gx0 + ((v - (known - halfS)) / (2 * halfS)) * (gx1 - gx0), gx0 + 3, gx1 - 3);
@@ -604,16 +617,21 @@ const Board = (() => {
           if (h > peak) { peak = h; peakX = x; }
         }
         R.curve.setAttribute("d", pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(""));
-        const topAt = (xa, xb) => { // highest ball or curve point between two x positions
+        const ballTop = (xa, xb) => { // highest ball between two x positions
           let t = L.floor;
-          for (const q of pts) if (q[0] >= xa && q[0] <= xb) t = Math.min(t, q[1]);
           for (let bb = Math.max(0, Math.floor((xa - L.x0) / L.bw)); bb <= Math.min(L.nb - 1, Math.floor((xb - L.x0) / L.bw)); bb++) if (S.reserved[bb]) t = Math.min(t, slotY(S.reserved[bb] - 1) - L.r);
           return t;
         };
-        const lw = 140, ax0 = clamp(peakX - lw / 2, L.x0, L.x1 - lw), yA = topAt(ax0, ax0 + lw) - 9;
-        let lx = ax0, ly = yA;
-        if (yA < L.heapTop + 12) { const yB = topAt(L.x0, L.x0 + lw) - 9; lx = L.x0; ly = Math.max(yB, L.heapTop + 12); }
-        R.curveLabel.setAttribute("x", lx); R.curveLabel.setAttribute("y", ly); R.curveLabel.textContent = "the formula fills this in";
+        const lw = 150, py = L.floor - peak;
+        const cands = [[peakX + 14, "start"], [peakX - 14, "end"]].filter(([x, an]) => (an === "start" ? x + lw <= L.x1 - 4 : x - lw >= L.x0));
+        let best = null;
+        for (const [x, an] of cands) { // the label sits at the peak's height, or just above any balls under it
+          const top = ballTop(an === "start" ? x : x - lw, an === "start" ? x + lw : x), y = Math.min(py + 3, top - 5);
+          const xa = an === "start" ? x : x - lw, xb = xa + lw;
+          if (y >= L.heapTop + 12 && !(L.xK > xa - 3 && L.xK < xb + 3)) { best = { x, an, y }; break; }
+        }
+        if (!best) { const [x, an] = cands[0] || [clamp(peakX - lw / 2, L.x0, L.x1 - lw), "start"]; best = { x, an, y: L.heapTop + 12 }; }
+        R.curveLabel.setAttribute("x", best.x); R.curveLabel.setAttribute("y", best.y); R.curveLabel.setAttribute("text-anchor", best.an); R.curveLabel.textContent = "the formula fills this in";
       }
     }
 
