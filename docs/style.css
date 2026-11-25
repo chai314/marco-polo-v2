@@ -337,3 +337,10 @@ body[data-step] .step:not(.on) { opacity: .32; }
   .lab .sheet { padding: 0 16px 14px; }
   .fine { padding: 40px 16px 56px; }
 }
+
+/* late overrides: these must follow the base exhibit rules */
+.wm { white-space: nowrap; }
+.lab .sheet .products { flex-basis: 100%; width: max-content; margin-bottom: 4px; }
+.lab .stage { margin: 0 14px; }
+@media (max-width: 760px) { .status { display: none; } .jump { margin-left: auto; margin-right: 0; } }
+@media (max-width: 640px) { .lab .sheet .products { width: 100%; } }
